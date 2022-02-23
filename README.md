@@ -1,7 +1,9 @@
 # Burn Unit Randomiser
 
 
-Randomly selects burn units from supplied shapefile to produce a burn schedule for any requested annual treatment percentage
+Randomly selects burn units from supplied shapefile to produce a burn schedule for any requested annual treatment percentage.
+
+Any number of randomised replicates can be produced.
 
 ![image_tool](https://user-images.githubusercontent.com/100050237/155258591-4d5f0bc6-c78d-4c4f-805b-8b5ed7d30e2d.JPG)
 
@@ -12,6 +14,6 @@ Randomly selects burn units from supplied shapefile to produce a burn schedule f
 
 ## Outputs
 
-Each replicate will produce 2 shapefiles:
+The tool will produce 2 shapefiles for each replicate:
 * [burn unit input file]_[annual treatment %]_[zones/noZones]_[replicate].shp = overlapping fire history for FAME etc.
 * [burn unit input file]_[annual treatment %]_[zones/noZones]_[replicate]_phx.shp = Phoenix LASTBURNT-type fire history
