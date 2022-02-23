@@ -22,7 +22,7 @@ class Tool(object):
 
     def getParameterInfo(self):
         """Define parameter definitions"""
-        # First parameter
+
         param0 = arcpy.Parameter(
             displayName="Input Features",
             name="in_features",
@@ -30,47 +30,47 @@ class Tool(object):
             parameterType="Required",
             direction="Input")
 
-        # Second parameter
-        param1 = arcpy.Parameter(
+        param1 = arcpy.Parameter(displayName="Destination Folder",
+            name="in_destination",
+            datatype="DEFolder",
+            direction="Input")
+
+        param2 = arcpy.Parameter(
             displayName="Treatment Percentage",
             name="treat_perc",
             datatype="double",
             parameterType="Required",
             direction="Input")
 
-        # Third parameter
-        param2 = arcpy.Parameter(
+        param3 = arcpy.Parameter(
             displayName="Replicates",
             name="n_replicates",
             datatype="long",
             parameterType="Required",
             direction="Input")
 
-        # Fourth parameter
-        param3 = arcpy.Parameter(
+        param4 = arcpy.Parameter(
             displayName="Start Year",
             name="start_year",
             datatype="long",
             parameterType="Required",
             direction="Input")
 
-        # Fifth parameter
-        param4 = arcpy.Parameter(
+        param5 = arcpy.Parameter(
             displayName="End Year",
             name="end_year",
             datatype="long",
             parameterType="Required",
             direction="Input")
 
-        # Sixth parameter
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Randomise within zones",
             name="randomCheckbox",
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input")
 
-        params = [param0, param1, param2, param3, param4, param5]
+        params = [param0, param1, param2, param3, param4, param5, param6]
         return params
 
     def isLicensed(self):
@@ -89,19 +89,20 @@ class Tool(object):
 
         # Turn the tool parameters into usable variables
         burnunits = parameters[0].valueAsText
-        treatmentPercentage = float(parameters[1].valueAsText)
-        replicates = int(parameters[2].valueAsText)
-        randomChecked = parameters[5].valueAsText
+        out_folder_path = parameters[1].valueAsText 
+        treatmentPercentage = float(parameters[2].valueAsText)
+        replicates = int(parameters[3].valueAsText)
+        yearStart = int(parameters[4].valueAsText)
+        yearFinish = int(parameters[5].valueAsText)
+        randomChecked = parameters[6].valueAsText
         if randomChecked == "true":
             randomWithinZones = True
         else:
             randomWithinZones = False
-
-        yearStart = int(parameters[3].valueAsText)
-        yearFinish = int(parameters[4].valueAsText)
         yearsSeries = yearFinish - yearStart
 
         arcpy.AddMessage("burnunits = " + burnunits)
+        arcpy.AddMessage("out_folder_path = " + out_folder_path)
         arcpy.AddMessage("treatmentPercentage = " + str(treatmentPercentage))
         arcpy.AddMessage("replicates = " + str(replicates))
         arcpy.AddMessage("randomWithinZones = " + str(randomWithinZones))
@@ -115,6 +116,7 @@ class Tool(object):
         sort_field = 'sort'
         firetype_field = 'FIRETYPE'
         burndate_field = "Burn_Date"
+        timesincefire_field = "TSF"
 
         # Set the minimum and maximum rotation for [APZ, BMZ, LMZ]
         minRotation = [4, 8, 15]
@@ -141,6 +143,11 @@ class Tool(object):
                     ]
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
 
+        # Create a copy of the input shapefile so we're not doing any editing directly in the source file
+        newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
+        arcpy.CopyFeatures_management(burnunits, newburnunits)
+        burnunits = newburnunits
+
         # Prepare the input shapefile
         try:
             # check if the sort field exists
@@ -150,6 +157,17 @@ class Tool(object):
                 # Add a new field of that name   
                 arcpy.AddField_management(burnunits, sort_field, "DOUBLE", 6, 4)
                 arcpy.AddMessage("sort field did not exist... but now it does!") 
+        except Exception as e:
+            arcpy.AddMessage(arcpy.GetMessages())
+
+        try:
+            # check if the time since fire field exists
+            if arcpy.ListFields(burnunits, timesincefire_field): #if field exists, evaluates to true
+                arcpy.AddMessage("time since fire field exists") 
+            else:
+                # Add a new field of that name   
+                arcpy.AddField_management(burnunits, timesincefire_field, "LONG")
+                arcpy.AddMessage("time since fire field did not exist... but now it does!") 
         except Exception as e:
             arcpy.AddMessage(arcpy.GetMessages())
 
@@ -323,12 +341,15 @@ class Tool(object):
                         if zone == "APZ":
                             zoneAnnualHectares = setAnnualHectares[0]
                             zoneRotation = setRotation[0]
+                            zoneMinimumYears = minRotation[0]
                         elif zone == "BMZ":
                             zoneAnnualHectares = setAnnualHectares[1]
                             zoneRotation = setRotation[1]
+                            zoneMinimumYears = minRotation[1]
                         elif zone == "LMZ":
                             zoneAnnualHectares = setAnnualHectares[2]
                             zoneRotation = setRotation[2]
+                            zoneMinimumYears = minRotation[2]
 
                         with arcpy.da.InsertCursor(burnunits_output, lstFields) as outputCursor:
                             with arcpy.da.UpdateCursor(burnunits_sorted, lstFields, where_clause=expression) as cursor:
@@ -345,17 +366,19 @@ class Tool(object):
                                         currentYear = currentRotation - 1
 
                                         while currentYear <= yearsSeries:
-                                            
-                                            # set burn date
-                                            burnDate = (yearStart + currentYear) * 10000 + 401
-                                            row[lstFields.index("Burn_Date")] = burnDate
-                                            cursor.updateRow(row) 
-                                            
-                                            # send burn unit to output
-                                            fieldValues = []
-                                            for field in row:
-                                                fieldValues.append(field)
-                                            outputCursor.insertRow(fieldValues)
+
+                                            if row[lstFields.index(timesincefire_field)] >= zoneMinimumYears: # This removes in a rather crude way any burning below minimum rotation. The burn unit will still proceed to later repeats.
+
+                                                # set burn date
+                                                burnDate = (yearStart + currentYear) * 10000 + 401
+                                                row[lstFields.index("Burn_Date")] = burnDate
+                                                cursor.updateRow(row) 
+                                                
+                                                # send burn unit to output
+                                                fieldValues = []
+                                                for field in row:
+                                                    fieldValues.append(field)
+                                                outputCursor.insertRow(fieldValues)
                                             
                                             # go to next repeat
                                             currentYear += zoneRotation 
@@ -400,7 +423,6 @@ class Tool(object):
         return
 
 # TO DO
-# 2. Consider creating then later deleting a copy of the burnunits shapefile so that we're not writing directly to the input layer (kinda bad form)
 # 4. Merge in pre-schedule fire history
 # 5. Run Phoenix Data Converter to product Phoenix fire histories (be sure to check sort order is correct) - Or do we? This would require us to know which date should be used.
 # 6. Create a log file (CSV maybe?) to hold the internal details such as rotation and hectares per zone that were used to create the fire histories
