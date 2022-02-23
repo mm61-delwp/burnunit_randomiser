@@ -1,4 +1,4 @@
-# Burn Unit_randomiser
+# Burn Unit Randomiser
 
 
 Randomly selects burn units from supplied shapefile to produce a burn schedule for any requested annual treatment percentage
