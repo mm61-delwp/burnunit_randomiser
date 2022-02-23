@@ -119,28 +119,29 @@ class Tool(object):
         timesincefire_field = "TSF"
 
         # Set the minimum and maximum rotation for [APZ, BMZ, LMZ]
+        ## Dictionary format ['DISTRICT NAME'] = [[minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         minMaxRotationDistrictDict = {}
-        minMaxRotationDistrictDict['FAR SOUTH WEST']    = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['GOULBURN']          = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['LATROBE']           = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['MACALISTER']        = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['MALLEE']            = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['METROPOLITAN']      = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['MIDLANDS']          = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['MURRAY GOLDFIELDS'] = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['MURRINDINDI']       = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['OTWAY']             = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['OVENS']             = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['SNOWY']             = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['TAMBO']             = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['UPPER MURRAY']      = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['WIMMERA']           = [[4, 8, 15], [8, 15, 50]]
-        minMaxRotationDistrictDict['YARRA']             = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['FAR SOUTH WEST']    = [[4, 8, 15], [8, 15, 50], 0.0]
+        minMaxRotationDistrictDict['GOULBURN']          = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['LATROBE']           = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['MACALISTER']        = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['MALLEE']            = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['METROPOLITAN']      = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['MIDLANDS']          = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['MURRAY GOLDFIELDS'] = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['MURRINDINDI']       = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['OTWAY']             = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['OVENS']             = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['SNOWY']             = [[4, 8, 15], [8, 15, 50], 0.65]
+        minMaxRotationDistrictDict['TAMBO']             = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['UPPER MURRAY']      = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['WIMMERA']           = [[4, 8, 15], [8, 15, 50], 0.5]
+        minMaxRotationDistrictDict['YARRA']             = [[4, 8, 15], [8, 15, 50], 0.5]
         
         # Set the proportion of zonal weighting between 1.0 (completely random within zones) and 0.0 (completely random, ignoring zones)
         zonalWeighting = 0.5
 
-        # Just a list of regions & districts
+        # Just a list of regions & districts    ... Now that we have a dictionary (see above), probably should tidy things up so these aren't necessary.
         barwonsouthwest_districts = ['FAR SOUTH WEST', 'OTWAY']
         gippsland_districts =  ['SNOWY', 'TAMBO', 'MACALISTER', 'LATROBE']
         grampians_districts = ['WIMMERA', 'MIDLANDS']
@@ -156,6 +157,7 @@ class Tool(object):
                     ["Loddon Mallee", loddonmallee_districts],
                     ["Port Phillip", portphillip_districts]
                     ]
+
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
 
         # Create a copy of the input shapefile so we're not doing any editing directly in the source file
@@ -328,6 +330,7 @@ class Tool(object):
                             setProportionZones = [(apzHa / totalAnnualHectares), (bmzHa / totalAnnualHectares), (lmzHa / totalAnnualHectares)]
                         
                         # Now we weight these to produce something between full random within zones and random without zones
+                        zonalWeighting = minMaxRotationDistrictDict.get(district)[2]    # pulls zone weighting from table
                         setProportionWeighted =     [(proportionRandomWithoutZones[0] * (1 - zonalWeighting) + setProportionZones[0] * zonalWeighting), 
                                                     (proportionRandomWithoutZones[1] * (1 - zonalWeighting) + setProportionZones[1] * zonalWeighting),
                                                     (proportionRandomWithoutZones[2] * (1 - zonalWeighting) + setProportionZones[2] * zonalWeighting)]
