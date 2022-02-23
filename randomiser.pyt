@@ -119,9 +119,24 @@ class Tool(object):
         timesincefire_field = "TSF"
 
         # Set the minimum and maximum rotation for [APZ, BMZ, LMZ]
-        minRotation = [4, 8, 15]
-        maxRotation = [8, 15, 50]
-
+        minMaxRotationDistrictDict = {}
+        minMaxRotationDistrictDict['FAR SOUTH WEST']    = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['GOULBURN']          = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['LATROBE']           = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['MACALISTER']        = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['MALLEE']            = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['METROPOLITAN']      = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['MIDLANDS']          = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['MURRAY GOLDFIELDS'] = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['MURRINDINDI']       = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['OTWAY']             = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['OVENS']             = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['SNOWY']             = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['TAMBO']             = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['UPPER MURRAY']      = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['WIMMERA']           = [[4, 8, 15], [8, 15, 50]]
+        minMaxRotationDistrictDict['YARRA']             = [[4, 8, 15], [8, 15, 50]]
+        
         # Set the proportion of zonal weighting between 1.0 (completely random within zones) and 0.0 (completely random, ignoring zones)
         zonalWeighting = 0.5
 
@@ -273,6 +288,11 @@ class Tool(object):
                     rand_setRotation = [rand_apzRotation, rand_bmzRotation, rand_lmzRotation]
 
                     # Calculate requirements for selection within zones
+                    ## Get the Min and Max rotations for current district
+                    minRotation = minMaxRotationDistrictDict.get(district)[0]
+                    maxRotation = minMaxRotationDistrictDict.get(district)[1]
+
+                    # Now turn these into hectares and proportions
                     minHa = [(zonearea[0] / maxRotation[0]), (zonearea[1] / maxRotation[1]), (zonearea[2]/maxRotation[2])]
                     maxHa = [(zonearea[0] / minRotation[0]), (zonearea[1] / minRotation[1]), (zonearea[2]/minRotation[2])]
                     minHaApzBmz = minHa[0] + minHa[1]
