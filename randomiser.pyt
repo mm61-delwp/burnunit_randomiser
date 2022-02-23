@@ -233,7 +233,7 @@ class Tool(object):
             
             # export a sorted copy (because the SQL sort in searchCursor only works in geodatabases apparently)
             burnunits_sorted = os.path.splitext(burnunits)[0] + '_sorted.shp'
-            arcpy.Sort_management(burnunits , burnunits_sorted, [["sort", "ASCENDING"]])
+            arcpy.Sort_management(burnunits , burnunits_sorted, [["sort", "ASCENDING"]]) # replace "sort" with sort_field
 
             for region in regions:
                 for district in region[1]:
@@ -260,7 +260,7 @@ class Tool(object):
 
                     # Determine the rotations and annual hectares required for each zone
                     # Rotation is the number of years to divide the zone into, which is also the number of years between repeat treatments for each burn unit
-                    totalAnnualHectares = totalHectares * (treatmentPercentage / 100)
+                    totalAnnualHectares = totalHectaresExPBEZ * (treatmentPercentage / 100)
 
                     # Calculate requirements for random selection within districts. Also used to weight selection within zones.
                     rand_apzAnnualHectares = (zonearea[0] / totalHectaresExPBEZ) * totalAnnualHectares
@@ -279,7 +279,7 @@ class Tool(object):
                     minHaApzBmzLmz = minHa[0] + minHa[1] + minHa[2]
                     proportionMinHaApzBmz = [(minHa[0] / minHaApzBmz), (minHa[1] / minHaApzBmz)]
                     proportionMinHaApzBmzLmz = [(minHa[0] / minHaApzBmzLmz), (minHa[1] / minHaApzBmzLmz), (minHa[2] / minHaApzBmzLmz)]
-                    proportionMaxHaApzBmzLmz = [(maxHa[0] / minHaApzBmzLmz), (maxHa[1] / minHaApzBmzLmz), (maxHa[2] / minHaApzBmzLmz)]
+                    proportionMaxHaApzBmzLmz = [(maxHa[0] / minHaApzBmzLmz), (maxHa[1] / minHaApzBmzLmz), (maxHa[2] / minHaApzBmzLmz)] # delete? I don't think this is used anywhere
                     proportionRandomWithoutZones = [(rand_apzAnnualHectares / totalAnnualHectares), (rand_bmzAnnualHectares / totalAnnualHectares), (rand_lmzAnnualHectares / totalAnnualHectares)]
 
                     if randomWithinZones == False:
