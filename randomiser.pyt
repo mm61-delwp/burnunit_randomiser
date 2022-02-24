@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import arcpy, random, math, os, glob
+import arcpy, random, math, os, glob, csv
 
 
 class Toolbox(object):
@@ -119,6 +119,8 @@ class Tool(object):
         timesincefire_field = 'TSF'
 
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
+        strPercentage = ('000' + (str(treatmentPercentage)).replace(".", "-"))[-4:]
+        strZones = 'zones' if randomWithinZones else 'nozones'
 
         # Dictionary holding all district details including rotations & weighting for zone-weighted method
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
@@ -136,18 +138,18 @@ class Tool(object):
         districtDictionary['OVENS']             = ['Hume',                [4, 8, 15], [8, 15, 50], 0.5]
         districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.65]
         districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['UPPER MURRAY']      = ['Hume',                [4, 8, 15], [8, 15, 50], 0.5]
+        districtDictionary['UPPER MURRAY']      = ['Hume',                [7, 12, 15], [7, 12, 50], 0.5]
         districtDictionary['WIMMERA']           = ['Grampians',           [4, 8, 15], [8, 15, 50], 0.5]
         districtDictionary['YARRA']             = ['Port Phillip',        [4, 8, 15], [8, 15, 50], 0.5]
         
         # Function to delete all parts of a shapefile
         def delete_shapefile(directory, shapefile_name):
             # remove path from shapefile_name if required
-            shapefile_name = str(os.path.split(shapefile_name[1]))
-            
+            shapefile_name = str(os.path.split(shapefile_name)[1])
+
             # make full path including directory
             shapefile = os.path.join(directory, shapefile_name)
-            
+   
             # find all parts of the shapefile
             files = glob.glob(os.path.splitext(shapefile)[0] + '.*')
             
@@ -180,11 +182,11 @@ class Tool(object):
                 targetCursor.deleteRow()
             del targetCursor  
 
-
         # Create a copy of the input shapefile so we're not doing any editing directly in the source file
         newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
         arcpy.CopyFeatures_management(burnunits, newburnunits)
         burnunits = newburnunits
+        outputString = os.path.splitext(burnunits)[0] + '_' + strPercentage + 'pc_' + strZones + '_' + str(yearStart) + 'to' + str(yearFinish)
 
         # Prepare the input shapefile
         add_field(burnunits, sort_field, "DOUBLE", 6, 4)
@@ -199,29 +201,40 @@ class Tool(object):
                 cursor.updateRow(row)
         del cursor
 
+        # Create a CSV log file
+        logfileName = (outputString + '_log.csv')
+        logfile = open(os.path.join(out_folder_path, logfileName), 'w', newline='')
+        writer = csv.writer(logfile)
+        header =    ['district', 'region', 
+                    'apz_total_ha', 'bmz_total_ha', 'lmz_total_ha', 'pbez_total_ha', 
+                    'apz_min_rot', 'apz_max_rot', 'bmz_min_rot', 'bmz_max_rot', 
+                    'zone_weighting', 'random_weighting', 
+                    'apz_annual_ha', 'bmz_annual_ha', 'lmz_annual_ha', 
+                    'apz_rot', 'bmz_rot', 'lmz_rot', 
+                    'apz_prop', 'bmz_prop', 'lmz_prop'
+                    ]
+        writer.writerow(header)
+
         for replicate in range (1, replicates + 1):
                     
             arcpy.AddMessage("Processing replicate " + str(replicate))
 
             # Duplicate the burn units layer then empty it out (so we've got a shapefile to dump stuff in later)
-            tempStrPercentage = ("000" + (str(treatmentPercentage)).replace(".", "-"))
-            tempStrReplicate = ("0" + str(replicate))
-            if randomWithinZones == True:
-                tempStrZones = "zones"
-            else:
-                tempStrZones = "nozones"
-            burnunits_output = os.path.splitext(burnunits)[0] + "_" + tempStrPercentage[-4:] + "pc_" + tempStrZones + "_r" + tempStrReplicate[-2:] +'.shp'
+            strReplicate = ('0' + str(replicate))[-2:]
+            burnunits_output = outputString + '_r' + strReplicate +'.shp'
             
             duplicate_empty_shapefile(burnunits, burnunits_output)
+
+            # Make a copy of the empty burn units layer for the Phoenix fire history version
+            burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
+            arcpy.CopyFeatures_management(burnunits_output, burnunits_output_phx)
+
+            # Make a list of fields in the shapefile
             lstFields = [field.name for field in arcpy.ListFields(burnunits_output) if field.type not in ['Geometry']]
             lstFields.append("SHAPE@") # add the full Geometry object
 
-            # Duplicate the empty burn units layer for the Phoenix fire history version
-            burnunits_output_phx = os.path.splitext(burnunits)[0] + "_" + tempStrPercentage[-4:] + "pc_" + tempStrZones + "_r" + tempStrReplicate[-2:] +'_phx.shp'
-            arcpy.CopyFeatures_management(burnunits_output, burnunits_output_phx)
-            
             # populate sort field with random values
-            with arcpy.da.UpdateCursor(burnunits, ["sort"]) as cursor:
+            with arcpy.da.UpdateCursor(burnunits, [sort_field]) as cursor:
                 for row in cursor:
                     row[0] = random.random()
                     cursor.updateRow(row)
@@ -229,7 +242,7 @@ class Tool(object):
             
             # export a sorted copy (because the SQL sort in searchCursor only works in geodatabases apparently)
             burnunits_sorted = os.path.splitext(burnunits)[0] + '_sorted.shp'
-            arcpy.Sort_management(burnunits , burnunits_sorted, [["sort", "ASCENDING"]]) # replace "sort" with sort_field
+            arcpy.Sort_management(burnunits , burnunits_sorted, [[sort_field, "ASCENDING"]])
 
             
             for district in districtDictionary.keys():
@@ -237,35 +250,33 @@ class Tool(object):
                 
                 # Create an expression with proper delimiters
                 expression = arcpy.AddFieldDelimiters(burnunits, district_field) + " = '" + district + "'"
-                # arcpy.AddMessage(expression)
                 
-                zonearea = [0, 0, 0, 0, 0]      # [APZ, BMZ, LMZ, PBEZ] selected hectares
+                selectedArea = [0, 0, 0, 0]      # [APZ, BMZ, LMZ, PBEZ] selected hectares
 
                 # Calculate gross hectares per zone - I'm sure there's a more efficient way to do this but it works!
                 with arcpy.da.SearchCursor(burnunits_sorted, [id_field, region_field, district_field, zone_field, grossarea_field], where_clause=expression) as cursor:
                     for row in cursor:
                         if row[3] == "APZ":
-                            zonearea[0] += row[4]
+                            selectedArea[0] += row[4]
                         elif row[3] == "BMZ":
-                            zonearea[1] += row[4]
+                            selectedArea[1] += row[4]
                         elif row[3] == "LMZ":
-                            zonearea[2] += row[4]
+                            selectedArea[2] += row[4]
                         elif row[3] == "PBEZ":
-                            zonearea[3] += row[4]
-                totalHectares = sum(zonearea)
-                totalHectaresExPBEZ = sum(zonearea) - zonearea[3]
+                            selectedArea[3] += row[4]
+                totalHectaresExPBEZ = sum(selectedArea) - selectedArea[3]
 
                 # Determine the rotations and annual hectares required for each zone
                 # Rotation is the number of years to divide the zone into, which is also the number of years between repeat treatments for each burn unit
                 totalAnnualHectares = totalHectaresExPBEZ * (treatmentPercentage / 100)
 
                 # Calculate requirements for random selection within districts. Also used to weight selection within zones.
-                rand_apzAnnualHectares = (zonearea[0] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_apzRotation = math.trunc(zonearea[0]/rand_apzAnnualHectares)
-                rand_bmzAnnualHectares = (zonearea[1] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_bmzRotation = math.trunc(zonearea[1]/rand_bmzAnnualHectares)
-                rand_lmzAnnualHectares = (zonearea[2] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_lmzRotation = math.trunc(zonearea[2]/rand_lmzAnnualHectares)
+                rand_apzAnnualHectares = (selectedArea[0] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_apzRotation = math.trunc(selectedArea[0]/rand_apzAnnualHectares)
+                rand_bmzAnnualHectares = (selectedArea[1] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_bmzRotation = math.trunc(selectedArea[1]/rand_bmzAnnualHectares)
+                rand_lmzAnnualHectares = (selectedArea[2] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_lmzRotation = math.trunc(selectedArea[2]/rand_lmzAnnualHectares)
                 rand_setAnnualHectares = [rand_apzAnnualHectares, rand_bmzAnnualHectares, rand_lmzAnnualHectares]
                 rand_setRotation = [rand_apzRotation, rand_bmzRotation, rand_lmzRotation]
 
@@ -275,8 +286,8 @@ class Tool(object):
                 maxRotation = districtDictionary.get(district)[2]
 
                 # Now turn these into hectares and proportions
-                minHa = [(zonearea[0] / maxRotation[0]), (zonearea[1] / maxRotation[1]), (zonearea[2]/maxRotation[2])]
-                maxHa = [(zonearea[0] / minRotation[0]), (zonearea[1] / minRotation[1]), (zonearea[2]/minRotation[2])]
+                minHa = [(selectedArea[0] / maxRotation[0]), (selectedArea[1] / maxRotation[1]), (selectedArea[2]/maxRotation[2])]
+                maxHa = [(selectedArea[0] / minRotation[0]), (selectedArea[1] / minRotation[1]), (selectedArea[2]/minRotation[2])]
                 minHaApzBmz = minHa[0] + minHa[1]
                 minHaApzBmzLmz = minHa[0] + minHa[1] + minHa[2]
                 proportionMinHaApzBmz = [(minHa[0] / minHaApzBmz), (minHa[1] / minHaApzBmz)]
@@ -319,11 +330,11 @@ class Tool(object):
 
                     # Use these proportions to calculate annual hectare requirements & rotations
                     apzAnnualHectares = setProportion[0] * totalAnnualHectares
-                    apzRotation = math.trunc(zonearea[0]/apzAnnualHectares)
+                    apzRotation = math.trunc(selectedArea[0]/apzAnnualHectares)
                     bmzAnnualHectares = setProportion[1] * totalAnnualHectares
-                    bmzRotation = math.trunc(zonearea[1]/bmzAnnualHectares)
+                    bmzRotation = math.trunc(selectedArea[1]/bmzAnnualHectares)
                     lmzAnnualHectares = setProportion[2] * totalAnnualHectares
-                    lmzRotation = math.trunc(zonearea[2]/lmzAnnualHectares)
+                    lmzRotation = math.trunc(selectedArea[2]/lmzAnnualHectares)
                     setAnnualHectares = [apzAnnualHectares, bmzAnnualHectares, lmzAnnualHectares]
                     setRotation = [apzRotation, bmzRotation, lmzRotation]
                 
@@ -334,8 +345,20 @@ class Tool(object):
                                         + "(Rotation: " + str(apzRotation) + "/" + str(bmzRotation) + "/" + str(lmzRotation) + "yrs, " \
                                         + str(round(setProportion[0]* 100, 1)) + "/" + str(round(setProportion[1] * 100, 1)) + "/" + str(round(setProportion[2] * 100, 1)) + "%)")
 
+                    # Send same information to the logfile
+                    row =   [district, region, 
+                            round(selectedArea[0], 1), round(selectedArea[1], 1), round(selectedArea[2], 1), round(selectedArea[3], 1), 
+                            districtDictionary.get(district)[1][0], districtDictionary.get(district)[2][0],
+                            districtDictionary.get(district)[1][1], districtDictionary.get(district)[2][1],
+                            districtDictionary.get(district)[3], 1 - districtDictionary.get(district)[3],
+                            round(apzAnnualHectares,1), round(bmzAnnualHectares, 1), round(lmzAnnualHectares, 1), 
+                            apzRotation, bmzRotation, lmzRotation, 
+                            round(setProportion[0]* 100, 1), round(setProportion[1] * 100, 1), round(setProportion[2] * 100, 1)
+                            ]
+                    writer.writerow(row)
+
                 for zone in ["APZ", "BMZ", "LMZ"]:
-                    expression = arcpy.AddFieldDelimiters(burnunits_sorted, district_field) + " = '" + district + "' AND " + arcpy.AddFieldDelimiters(burnunits_sorted, zone_field) + " = '" + zone + "' ORDER BY " + arcpy.AddFieldDelimiters(burnunits_sorted, "sort")
+                    expression = arcpy.AddFieldDelimiters(burnunits_sorted, district_field) + " = '" + district + "' AND " + arcpy.AddFieldDelimiters(burnunits_sorted, zone_field) + " = '" + zone + "' ORDER BY " + arcpy.AddFieldDelimiters(burnunits_sorted, sort_field)
 
                     currentHa = 0
                     currentYear = 1
@@ -390,7 +413,9 @@ class Tool(object):
             # Create a Phoenix-ready fire history (ie. lastburnt)
             # Sort replicate by burn unit ID and descending burn date - Using management.Sort instead of SQL sorting the cursor because it was causing failure.
             burnunits_output_phx_sort = os.path.splitext(burnunits_output_phx)[0] + '_sort.shp'
-            arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, "BUID ASCENDING;Burn_Date DESCENDING", "UR")
+            expression = (str(id_field) + ' ASCENDING;' + str(burndate_field) + ' DESCENDING')
+            #arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, "BUID ASCENDING;Burn_Date DESCENDING", "UR")
+            arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, expression, "UR")
             with arcpy.da.InsertCursor(burnunits_output_phx, lstFields) as outputCursor:
                 with arcpy.da.SearchCursor(burnunits_output_phx_sort, lstFields) as cursor:
                     previous_buid = "nil"
@@ -419,9 +444,11 @@ class Tool(object):
         # Delete the burnunits_sorted shapefile 
         delete_shapefile(out_folder_path, burnunits_sorted)
 
+        # Close the logfile
+        logfile.close()
+
         return
 
 # TO DO
 # 4. Merge in pre-schedule fire history
 # 5. Run Phoenix Data Converter to product Phoenix fire histories (be sure to check sort order is correct) - Or do we? This would require us to know which date should be used.
-# 6. Create a log file (CSV maybe?) to hold the internal details such as rotation and hectares per zone that were used to create the fire histories
