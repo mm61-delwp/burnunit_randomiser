@@ -182,20 +182,20 @@ class Tool(object):
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         districtDictionary = {}
         districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.50]
-        #districtDictionary['GOULBURN']          = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.50]
         districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
         districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
-        districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],   [9, 14, 50],   0.75]
+        districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
         districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
-        #districtDictionary['MURRINDINDI']       = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.50]
         districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.50]
-        #districtDictionary['OVENS']             = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.50]
         districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        #districtDictionary['UPPER MURRAY']      = ['Hume',                [7, 12, 15],  [7, 12, 50],    0.5]
-        districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],   [8, 14, 50],   0.90]
+        districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.50]
+        districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
         districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
         
         # Function to delete all parts of a shapefile
@@ -586,7 +586,8 @@ class Tool(object):
                         arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
 
                         # Run Phoenix Data Converter
-                        pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe "' + str(temp_ascii) + '" "' + str(phoenix_output) + '" ' + str(cell_size) + ' ' + str(dateString))
+                        # Example command line: C:\Data\Phoenix\scripts>"C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
+                        pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe ' + str(temp_ascii) + ' ' + str(phoenix_output) + ' ' + str(cell_size) + ' ' + str(dateString))
                         arcpy.AddMessage('Phoenix Data Converter: ' + pdc_string)
                         subprocess.call(pdc_string)
 
