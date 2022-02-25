@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import arcpy, random, math, os, glob, csv
+import arcpy, random, math, os, glob, csv, subprocess
+from datetime import datetime
 
 
 class Toolbox(object):
@@ -16,7 +17,7 @@ class Toolbox(object):
 class Tool(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Randomise burn unit treatment schedule"
+        self.label = "Phoenix Future Fire History Maker"
         self.description = ""
         self.canRunInBackground = False
 
@@ -70,7 +71,34 @@ class Tool(object):
             parameterType="Optional",
             direction="Input")
 
-        params = [param0, param1, param2, param3, param4, param5, param6]
+        param7 = arcpy.Parameter(
+            displayName="Include past fire history (Note: this is slow!)",
+            name="fireHistCheckbox",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input")
+        
+        param8 = arcpy.Parameter(
+            displayName="Past Fire History",
+            name="oldFirehist",
+            datatype="DEFeatureClass",
+            parameterType="Optional",
+            direction="Input")
+
+        param9 = arcpy.Parameter(
+            displayName="Create Phoenix fire history .zip (Note: this is slow!)",
+            name="runPhoenixCheckbox",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
+
+        param10 = arcpy.Parameter(displayName="Phoenix Data Converter location (directory)",
+            name="pdc_location",
+            datatype="DEFolder",
+            direction="Input")
+
+
+        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10]
         return params
 
     def isLicensed(self):
@@ -79,6 +107,16 @@ class Tool(object):
 
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal validation is performed.  This method is called whenever a parameter has been changed."""
+        if parameters[7].value == True: 
+            # if the box is checked (true), enable parameter 8
+            parameters[8].enabled = True
+            parameters[9].enabled = True
+            if parameters[9].value ==True:
+                parameters[10].enabled = True
+        else:
+            parameters[8].enabled = False
+            parameters[9].enabled = False
+            parameters[10].enabled = False
         return
 
     def updateMessages(self, parameters):
@@ -86,6 +124,9 @@ class Tool(object):
         return
 
     def execute(self, parameters, messages):
+        # Set environment & fix output extent to standard Phoenix data extent
+        arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("GDA 1994 VICGRID94")
+        arcpy.env.extent = arcpy.Extent(2036000, 2251970, 2965280, 2842370)
 
         # Turn the tool parameters into usable variables
         burnunits = parameters[0].valueAsText
@@ -95,10 +136,22 @@ class Tool(object):
         yearStart = int(parameters[4].valueAsText)
         yearFinish = int(parameters[5].valueAsText)
         randomChecked = parameters[6].valueAsText
+        fireHistChecked = parameters[7].valueAsText
+        fireHistory = parameters[8].valueAsText or "none"
+        runPdcChecked = randomChecked = parameters[9].valueAsText
+        phoenixDataConverterLoc = parameters[10].valueAsText 
         if randomChecked == "true":
             randomWithinZones = True
         else:
             randomWithinZones = False
+        if fireHistChecked == "true":
+            includeFireHistory = True
+        else:
+            includeFireHistory = False
+        if runPdcChecked == "true":
+            runPhoenixDataConverter = True
+        else:
+            runPhoenixDataConverter = False
         yearsSeries = yearFinish - yearStart
 
         arcpy.AddMessage("burnunits = " + burnunits)
@@ -106,6 +159,8 @@ class Tool(object):
         arcpy.AddMessage("treatmentPercentage = " + str(treatmentPercentage))
         arcpy.AddMessage("replicates = " + str(replicates))
         arcpy.AddMessage("randomWithinZones = " + str(randomWithinZones))
+        arcpy.AddMessage("includeFireHistory = " + str(includeFireHistory))
+        arcpy.AddMessage("fireHistory = " + str(fireHistory))
 
         # Define shapefile attributes
         id_field = 'BUID'
@@ -117,6 +172,7 @@ class Tool(object):
         firetype_field = 'FIRETYPE'
         burndate_field = 'Burn_Date'
         timesincefire_field = 'TSF'
+        season_field = 'SEASON'
 
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
         strPercentage = ('000' + (str(treatmentPercentage)).replace(".", "-"))[-4:]
@@ -125,22 +181,22 @@ class Tool(object):
         # Dictionary holding all district details including rotations & weighting for zone-weighted method
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         districtDictionary = {}
-        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [4, 8, 15], [8, 15, 50], 0.0]
-        districtDictionary['GOULBURN']          = ['Hume',                [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['MALLEE']            = ['Loddon Mallee',       [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['METROPOLITAN']      = ['Port Phillip',        [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['MIDLANDS']          = ['Grampians',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['MURRINDINDI']       = ['Hume',                [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['OTWAY']             = ['Barwon South West',   [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['OVENS']             = ['Hume',                [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.65]
-        districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['UPPER MURRAY']      = ['Hume',                [7, 12, 15], [7, 12, 50], 0.5]
-        districtDictionary['WIMMERA']           = ['Grampians',           [4, 8, 15], [8, 15, 50], 0.5]
-        districtDictionary['YARRA']             = ['Port Phillip',        [4, 8, 15], [8, 15, 50], 0.5]
+        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.50]
+        #districtDictionary['GOULBURN']          = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
+        districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
+        districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],   [9, 14, 50],   0.75]
+        districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
+        #districtDictionary['MURRINDINDI']       = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.50]
+        #districtDictionary['OVENS']             = ['Hume',                [4, 8, 15],   [8, 15, 50],    0.5]
+        districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        #districtDictionary['UPPER MURRAY']      = ['Hume',                [7, 12, 15],  [7, 12, 50],    0.5]
+        districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],   [8, 14, 50],   0.90]
+        districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
         
         # Function to delete all parts of a shapefile
         def delete_shapefile(directory, shapefile_name):
@@ -161,12 +217,15 @@ class Tool(object):
         def add_field(shapefile, field_name, *args):
             # check if the field exists
             if arcpy.ListFields(shapefile, field_name): #if field exists, evaluates to true
-                arcpy.AddMessage(field_name + " field exists") 
+                arcpy.AddMessage(field_name + ' field exists in ' + str(shapefile))
+                result = "exists"
             else:
                 # Add a new field of that name   
                 arcpy.AddField_management(shapefile, field_name, *args)
-                arcpy.AddMessage(field_name + " field did not exist... but now it does!") 
-        
+                arcpy.AddMessage(field_name + ' field missing from ' + str(shapefile) + '... adding')
+                result = "added"
+            return result
+
         # Function to create an empty copy of a shapefile
         def duplicate_empty_shapefile(input_shapefile, output_shapefile):
             # Create a list of fields including geometry
@@ -182,6 +241,15 @@ class Tool(object):
                 targetCursor.deleteRow()
             del targetCursor  
 
+        # Function to turn Burn_Date into SEASON
+        def burndate_to_season(burnDate):
+            #arcpy.AddMessage('burnDate: ' + str(burnDate))
+            year, month = int(str(burnDate)[0:4]), int(str(burnDate)[4:6])
+            if month <= 6:
+                return int(year)
+            else:
+                return int(year) + 1
+
         # Create a copy of the input shapefile so we're not doing any editing directly in the source file
         newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
         arcpy.CopyFeatures_management(burnunits, newburnunits)
@@ -193,10 +261,12 @@ class Tool(object):
         add_field(burnunits, timesincefire_field, "LONG")
         add_field(burnunits, burndate_field, "LONG")
         add_field(burnunits, firetype_field, "STRING", 10)
+        add_field(burnunits, season_field, "LONG")
 
         # populate FIRETYPE field (can't assume it's correct)
         with arcpy.da.UpdateCursor(burnunits, firetype_field) as cursor:
             for row in cursor:
+                # set firetype to burn
                 row[0] = "BURN"
                 cursor.updateRow(row)
         del cursor
@@ -225,9 +295,9 @@ class Tool(object):
             
             duplicate_empty_shapefile(burnunits, burnunits_output)
 
-            # Make a copy of the empty burn units layer for the Phoenix fire history version
-            burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
-            arcpy.CopyFeatures_management(burnunits_output, burnunits_output_phx)
+            # # Make a copy of the empty burn units layer for the Phoenix fire history version
+            # burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
+            # arcpy.CopyFeatures_management(burnunits_output, burnunits_output_phx)
 
             # Make a list of fields in the shapefile
             lstFields = [field.name for field in arcpy.ListFields(burnunits_output) if field.type not in ['Geometry']]
@@ -397,7 +467,12 @@ class Tool(object):
 
                                             # set burn date
                                             burnDate = (yearStart + currentYear) * 10000 + 401
-                                            row[lstFields.index("Burn_Date")] = burnDate
+                                            row[lstFields.index(burndate_field)] = burnDate
+
+                                            # set season
+                                            season = burndate_to_season(burnDate)
+                                            row[lstFields.index(season_field)] = season
+
                                             cursor.updateRow(row) 
                                             
                                             # send burn unit to output
@@ -408,38 +483,116 @@ class Tool(object):
                                         
                                         # go to next repeat
                                         currentYear += zoneRotation 
-            # Incorporate past fire history
+
+                    del cursor
 
             # Create a Phoenix-ready fire history (ie. lastburnt)
             # Sort replicate by burn unit ID and descending burn date - Using management.Sort instead of SQL sorting the cursor because it was causing failure.
-            burnunits_output_phx_sort = os.path.splitext(burnunits_output_phx)[0] + '_sort.shp'
-            expression = (str(id_field) + ' ASCENDING;' + str(burndate_field) + ' DESCENDING')
-            #arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, "BUID ASCENDING;Burn_Date DESCENDING", "UR")
-            arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, expression, "UR")
-            with arcpy.da.InsertCursor(burnunits_output_phx, lstFields) as outputCursor:
-                with arcpy.da.SearchCursor(burnunits_output_phx_sort, lstFields) as cursor:
-                    previous_buid = "nil"
-                    for row in cursor:
-                        current_buid = row[lstFields.index(id_field)]
-                        if current_buid == previous_buid:
-                            # we've already got the highest burn date for this burn unit so do nothing
-                            previous_buid = current_buid
-                        else:
-                            # send burn unit to output
-                            fieldValues = []
-                            for field in row:
-                                fieldValues.append(field)
-                            outputCursor.insertRow(fieldValues)
-                            previous_buid = current_buid
+            # burnunits_output_phx_sort = os.path.splitext(burnunits_output_phx)[0] + '_sort.shp'
+            # expression = (str(id_field) + ' ASCENDING;' + str(burndate_field) + ' DESCENDING')
+
+            # arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, expression, "UR")
+
+            # # Copy highest dated (most recent burn) to Phoenix file
+            # with arcpy.da.InsertCursor(burnunits_output_phx, lstFields) as outputCursor:
+            #     with arcpy.da.SearchCursor(burnunits_output_phx_sort, lstFields) as cursor:
+            #         previous_buid = "nil"
+            #         for row in cursor:
+            #             current_buid = row[lstFields.index(id_field)]
+            #             if current_buid == previous_buid:
+            #                 # we've already got the highest burn date for this burn unit so do nothing
+            #                 previous_buid = current_buid
+            #             else:
+            #                 # send burn unit to output
+            #                 fieldValues = []
+            #                 for field in row:
+            #                     fieldValues.append(field)
+            #                 outputCursor.insertRow(fieldValues)
+            #                 previous_buid = current_buid
+            # del outputCursor
+            # del cursor
             
-            # Delete phx temporary sort shapefile
-            delete_shapefile(out_folder_path, burnunits_output_phx_sort)
+            # # Delete phx temporary sort shapefile
+            # delete_shapefile(out_folder_path, burnunits_output_phx_sort)
 
-        # Create raster
+        # Incorporate past fire history -- Completely skips this bit if no fire history is provided
+        if includeFireHistory == True: 
 
-        # Run Phoenix Data Converter
+            # Make a list of fields in the fire history shapefile
+            lstFields_fireHistory = [field.name for field in arcpy.ListFields(fireHistory) if field.type not in ['Geometry']]
+            lstFields_fireHistory.append("SHAPE@") # add the full Geometry object
 
-        # Clean up unwanted files
+            ## Add necessary fields to fire history shapefile
+            add_field(fireHistory, burndate_field, "LONG")
+            season_checkexist = add_field(fireHistory, season_field, "LONG")
+            firetype_checkexist = add_field(fireHistory, firetype_field, "STRING", 10)
+
+            # Populate FIRETYPE field from Source and SEASON from Burn_Date
+            with arcpy.da.UpdateCursor(fireHistory, lstFields_fireHistory) as cursor:
+                for row in cursor:
+                    needs_update = False
+                    sourceValue = row[lstFields_fireHistory.index("Source")]
+                    burndateValue = row[lstFields_fireHistory.index(burndate_field)]
+                    
+                    # speed things up by only updating rows if required
+                    if season_checkexist == "added":
+                        seasonValue = burndate_to_season(burndateValue)
+                        needs_update = True
+                    if firetype_checkexist == "added":
+                        if sourceValue == 'Burns':
+                            row[lstFields_fireHistory.index(firetype_field)] = 'BURN'
+                        else:
+                            row[lstFields_fireHistory.index(firetype_field)] = 'BUSHFIRE'
+                        
+                        row[lstFields_fireHistory.index(season_field)] = seasonValue
+                        needs_update = true
+                    if needs_update:
+                        cursor.updateRow(row)
+            del cursor
+
+            # Merge shapefiles, retaining only FIRETYPE, Burn_Date and SEASON
+            for replicate in range (1, replicates + 1):
+                arcpy.AddMessage('Joining fire history to replicate ' + str(replicate))
+
+                strReplicate = ('0' + str(replicate))[-2:]
+                burnunits_output = outputString + '_r' + strReplicate +'.shp'
+                #burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
+
+                # Map fields for merge
+                field_mappings = arcpy.FieldMappings()
+                for field in [burndate_field, firetype_field, season_field]:
+                    field_map = arcpy.FieldMap()
+                    field_map.addInputField(fireHistory, field) 
+                    field_map.addInputField(burnunits_output, field)
+                    field_mappings.addFieldMap(field_map)
+
+                # do the merge
+                for shapefile in [burnunits_output]: #for shapefile in [burnunits_output, burnunits_output_phx]:
+                    arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
+
+                    trim = os.path.splitext(shapefile)[0]
+                    merged_output = trim + '_merged.shp'
+                    temp_raster = 'temp_raster'
+                    temp_ascii = trim + '.ASC'
+                    phoenix_output = trim + '.zip'
+                    cell_size = 30
+                    dateString = (str(yearFinish) + '06-30')
+
+                    arcpy.Merge_management([fireHistory, burnunits_output], merged_output, field_mappings)
+
+                    # Create raster and run Phoenix Data Converter
+                    if runPhoenixDataConverter == True:
+                        arcpy.PolygonToRaster_conversion(merged_output, burndate_field, temp_raster, 'MAXIMUM_AREA', burndate_field, cell_size)
+                        arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
+
+                        # Run Phoenix Data Converter
+                        pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe "' + str(temp_ascii) + '" "' + str(phoenix_output) + '" ' + str(cell_size) + ' ' + str(dateString))
+                        arcpy.AddMessage('Phoenix Data Converter: ' + pdc_string)
+                        subprocess.call(pdc_string)
+
+                    # Clean up unwanted files
+                    #os.remove(temp_raster)
+                    #os.remove(temp_ascii)
 
         # Delete the burnunits_sorted shapefile 
         delete_shapefile(out_folder_path, burnunits_sorted)
@@ -448,7 +601,3 @@ class Tool(object):
         logfile.close()
 
         return
-
-# TO DO
-# 4. Merge in pre-schedule fire history
-# 5. Run Phoenix Data Converter to product Phoenix fire histories (be sure to check sort order is correct) - Or do we? This would require us to know which date should be used.
