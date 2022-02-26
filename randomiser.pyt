@@ -31,7 +31,7 @@ class Tool(object):
             parameterType="Required",
             direction="Input")
 
-        param1 = arcpy.Parameter(displayName="Destination Folder",
+        param1 = arcpy.Parameter(displayName="Destination Directory",
             name="in_destination",
             datatype="DEFolder",
             direction="Input")
@@ -72,7 +72,7 @@ class Tool(object):
             direction="Input")
 
         param7 = arcpy.Parameter(
-            displayName="Include past fire history (Note: this is slow!)",
+            displayName="Include past fire history (Note: Slow! ~5 minutes per replicate)",
             name="fireHistCheckbox",
             datatype="GPBoolean",
             parameterType="Required",
@@ -86,7 +86,7 @@ class Tool(object):
             direction="Input")
 
         param9 = arcpy.Parameter(
-            displayName="Create Phoenix fire history .zip (Note: this is slow!)",
+            displayName="Create Phoenix fire history .zip (Note: Slow! ~20 minutes per replicate)",
             name="runPhoenixCheckbox",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -236,10 +236,9 @@ class Tool(object):
             arcpy.CopyFeatures_management(input_shapefile, output_shapefile)
 
             # Delete all rows
-            targetCursor = arcpy.da.UpdateCursor(output_shapefile, lstFields)
-            for row in targetCursor:
-                targetCursor.deleteRow()
-            del targetCursor  
+            with arcpy.da.UpdateCursor(output_shapefile, lstFields) as targetCursor:
+                for row in targetCursor:
+                    targetCursor.deleteRow()
 
         # Function to turn Burn_Date into SEASON
         def burndate_to_season(burnDate):
@@ -269,7 +268,6 @@ class Tool(object):
                 # set firetype to burn
                 row[0] = "BURN"
                 cursor.updateRow(row)
-        del cursor
 
         # Create a CSV log file
         logfileName = (outputString + '_log.csv')
@@ -301,6 +299,9 @@ class Tool(object):
 
             # Make a list of fields in the shapefile
             lstFields = [field.name for field in arcpy.ListFields(burnunits_output) if field.type not in ['Geometry']]
+            # Sort field list by slicing to ensure first field is sort_field - this should help with sorting cursors later
+            sort_field_position = lstFields.index(sort_field)
+            lstFields = lstFields[sort_field_position:] + lstFields[:sort_field_position]
             lstFields.append("SHAPE@") # add the full Geometry object
 
             # populate sort field with random values
@@ -308,12 +309,10 @@ class Tool(object):
                 for row in cursor:
                     row[0] = random.random()
                     cursor.updateRow(row)
-            del cursor
             
             # export a sorted copy (because the SQL sort in searchCursor only works in geodatabases apparently)
             burnunits_sorted = os.path.splitext(burnunits)[0] + '_sorted.shp'
             arcpy.Sort_management(burnunits , burnunits_sorted, [[sort_field, "ASCENDING"]])
-
             
             for district in districtDictionary.keys():
                 region = districtDictionary.get(district)[0]
@@ -448,7 +447,8 @@ class Tool(object):
                         zoneMinimumYears = minRotation[2]
 
                     with arcpy.da.InsertCursor(burnunits_output, lstFields) as outputCursor:
-                        with arcpy.da.UpdateCursor(burnunits_sorted, lstFields, where_clause=expression) as cursor:
+                        #with arcpy.da.UpdateCursor(burnunits_sorted, lstFields, where_clause=expression) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
+                        with arcpy.da.UpdateCursor(burnunits, lstFields, where_clause=expression, sql_clause = (None, 'ORDER BY "sort"')) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
                             for rotation in range(int(zoneRotation)):
                                 for row in cursor:
                                     # add gross burn unit are to currentHa
@@ -484,8 +484,6 @@ class Tool(object):
                                         # go to next repeat
                                         currentYear += zoneRotation 
 
-                    del cursor
-
             # Create a Phoenix-ready fire history (ie. lastburnt)
             # Sort replicate by burn unit ID and descending burn date - Using management.Sort instead of SQL sorting the cursor because it was causing failure.
             # burnunits_output_phx_sort = os.path.splitext(burnunits_output_phx)[0] + '_sort.shp'
@@ -509,8 +507,6 @@ class Tool(object):
             #                     fieldValues.append(field)
             #                 outputCursor.insertRow(fieldValues)
             #                 previous_buid = current_buid
-            # del outputCursor
-            # del cursor
             
             # # Delete phx temporary sort shapefile
             # delete_shapefile(out_folder_path, burnunits_output_phx_sort)
@@ -548,7 +544,6 @@ class Tool(object):
                         needs_update = true
                     if needs_update:
                         cursor.updateRow(row)
-            del cursor
 
             # Merge shapefiles, retaining only FIRETYPE, Burn_Date and SEASON
             for replicate in range (1, replicates + 1):
@@ -576,7 +571,7 @@ class Tool(object):
                     temp_ascii = trim + '.ASC'
                     phoenix_output = trim + '.zip'
                     cell_size = 30
-                    dateString = (str(yearFinish) + '06-30')
+                    dateString = (str(yearFinish) + '-06-30')
 
                     arcpy.Merge_management([fireHistory, burnunits_output], merged_output, field_mappings)
 
