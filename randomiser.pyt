@@ -226,17 +226,14 @@ class Tool(object):
                 result = "added"
             return result
 
-        # Function to create an empty copy of a shapefile
+        # Function to create an empty copy of a shapefile or feature class
         def duplicate_empty_shapefile(input_shapefile, output_shapefile):
-            # Create a list of fields including geometry
-            lstFields = [field.name for field in arcpy.ListFields(input_shapefile) if field.type not in ['Geometry']]
-            lstFields.append("SHAPE@") # add the full Geometry object
 
             # Copy the shapefile
             arcpy.CopyFeatures_management(input_shapefile, output_shapefile)
 
             # Delete all rows
-            with arcpy.da.UpdateCursor(output_shapefile, lstFields) as targetCursor:
+            with arcpy.da.UpdateCursor(output_shapefile, [id_field]) as targetCursor:
                 for row in targetCursor:
                     targetCursor.deleteRow()
 
@@ -251,9 +248,14 @@ class Tool(object):
 
         # Create a copy of the input shapefile so we're not doing any editing directly in the source file
         newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
+        # try using default geodatabase instead, to enable sorting of cursors
+        if not arcpy.Exists(out_folder_path + "\\temp.gdb"):
+            # create temp file geodatabase
+            arcpy.CreateFileGDB_management(out_folder_path, "temp.gdb")
+        newburnunits = out_folder_path + "\\temp.gdb\\burnunits"
         arcpy.CopyFeatures_management(burnunits, newburnunits)
+        outputString = 'FireHistory_' + strPercentage + 'pc_' + strZones + '_' + str(yearStart) + 'to' + str(yearFinish)
         burnunits = newburnunits
-        outputString = os.path.splitext(burnunits)[0] + '_' + strPercentage + 'pc_' + strZones + '_' + str(yearStart) + 'to' + str(yearFinish)
 
         # Prepare the input shapefile
         add_field(burnunits, sort_field, "DOUBLE", 6, 4)
@@ -274,10 +276,10 @@ class Tool(object):
         logfile = open(os.path.join(out_folder_path, logfileName), 'w', newline='')
         writer = csv.writer(logfile)
         header =    ['district', 'region', 
-                    'apz_total_ha', 'bmz_total_ha', 'lmz_total_ha', 'pbez_total_ha', 
+                    'apz_total_ha', 'bmz_total_ha', 'lmz_total_ha', 'pbez_total_ha', 'fmz_ha' 
                     'apz_min_rot', 'apz_max_rot', 'bmz_min_rot', 'bmz_max_rot', 
                     'zone_weighting', 'random_weighting', 
-                    'apz_annual_ha', 'bmz_annual_ha', 'lmz_annual_ha', 
+                    'apz_annual_ha', 'bmz_annual_ha', 'lmz_annual_ha', 'district_annual_ha'
                     'apz_rot', 'bmz_rot', 'lmz_rot', 
                     'apz_prop', 'bmz_prop', 'lmz_prop'
                     ]
@@ -289,20 +291,21 @@ class Tool(object):
 
             # Duplicate the burn units layer then empty it out (so we've got a shapefile to dump stuff in later)
             strReplicate = ('0' + str(replicate))[-2:]
-            burnunits_output = outputString + '_r' + strReplicate +'.shp'
+            burnunits_output = os.path.join(out_folder_path, outputString) + '_r' + strReplicate +'.shp'
             
             duplicate_empty_shapefile(burnunits, burnunits_output)
 
-            # # Make a copy of the empty burn units layer for the Phoenix fire history version
-            # burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
-            # arcpy.CopyFeatures_management(burnunits_output, burnunits_output_phx)
-
             # Make a list of fields in the shapefile
             lstFields = [field.name for field in arcpy.ListFields(burnunits_output) if field.type not in ['Geometry']]
-            # Sort field list by slicing to ensure first field is sort_field - this should help with sorting cursors later
+            lstFields.remove('Shape_Le_1')
+            lstFields.remove('Shape_Area')
+            lstFields.remove('FID')
+
+            # Sort field list by slicing to ensure first field is sort_field - this enables sorting of cursors later
             sort_field_position = lstFields.index(sort_field)
             lstFields = lstFields[sort_field_position:] + lstFields[:sort_field_position]
-            lstFields.append("SHAPE@") # add the full Geometry object
+            # Add geometry
+            lstFields.append("SHAPE@") 
 
             # populate sort field with random values
             with arcpy.da.UpdateCursor(burnunits, [sort_field]) as cursor:
@@ -310,10 +313,7 @@ class Tool(object):
                     row[0] = random.random()
                     cursor.updateRow(row)
             
-            # export a sorted copy (because the SQL sort in searchCursor only works in geodatabases apparently)
-            burnunits_sorted = os.path.splitext(burnunits)[0] + '_sorted.shp'
-            arcpy.Sort_management(burnunits , burnunits_sorted, [[sort_field, "ASCENDING"]])
-            
+            # Calcualte hectare requirements and produce output shapefiles
             for district in districtDictionary.keys():
                 region = districtDictionary.get(district)[0]
                 
@@ -323,7 +323,7 @@ class Tool(object):
                 selectedArea = [0, 0, 0, 0]      # [APZ, BMZ, LMZ, PBEZ] selected hectares
 
                 # Calculate gross hectares per zone - I'm sure there's a more efficient way to do this but it works!
-                with arcpy.da.SearchCursor(burnunits_sorted, [id_field, region_field, district_field, zone_field, grossarea_field], where_clause=expression) as cursor:
+                with arcpy.da.SearchCursor(burnunits, [id_field, region_field, district_field, zone_field, grossarea_field], where_clause=expression) as cursor:
                     for row in cursor:
                         if row[3] == "APZ":
                             selectedArea[0] += row[4]
@@ -361,7 +361,6 @@ class Tool(object):
                 minHaApzBmzLmz = minHa[0] + minHa[1] + minHa[2]
                 proportionMinHaApzBmz = [(minHa[0] / minHaApzBmz), (minHa[1] / minHaApzBmz)]
                 proportionMinHaApzBmzLmz = [(minHa[0] / minHaApzBmzLmz), (minHa[1] / minHaApzBmzLmz), (minHa[2] / minHaApzBmzLmz)]
-                proportionMaxHaApzBmzLmz = [(maxHa[0] / minHaApzBmzLmz), (maxHa[1] / minHaApzBmzLmz), (maxHa[2] / minHaApzBmzLmz)] # delete? I don't think this is used anywhere
                 proportionRandomWithoutZones = [(rand_apzAnnualHectares / totalAnnualHectares), (rand_bmzAnnualHectares / totalAnnualHectares), (rand_lmzAnnualHectares / totalAnnualHectares)]
 
                 if randomWithinZones == False:
@@ -406,7 +405,7 @@ class Tool(object):
                     lmzRotation = math.trunc(selectedArea[2]/lmzAnnualHectares)
                     setAnnualHectares = [apzAnnualHectares, bmzAnnualHectares, lmzAnnualHectares]
                     setRotation = [apzRotation, bmzRotation, lmzRotation]
-                
+
                 # Send some information to the geoprocessing messages screen, but only do it once.
                 if replicate == 1:
                     arcpy.AddMessage(   district + ", " + region + ": " \
@@ -416,18 +415,18 @@ class Tool(object):
 
                     # Send same information to the logfile
                     row =   [district, region, 
-                            round(selectedArea[0], 1), round(selectedArea[1], 1), round(selectedArea[2], 1), round(selectedArea[3], 1), 
+                            round(selectedArea[0], 1), round(selectedArea[1], 1), round(selectedArea[2], 1), round(selectedArea[3], 1), round(sum(selectedArea), 1)
                             districtDictionary.get(district)[1][0], districtDictionary.get(district)[2][0],
                             districtDictionary.get(district)[1][1], districtDictionary.get(district)[2][1],
                             districtDictionary.get(district)[3], 1 - districtDictionary.get(district)[3],
-                            round(apzAnnualHectares,1), round(bmzAnnualHectares, 1), round(lmzAnnualHectares, 1), 
+                            round(apzAnnualHectares,1), round(bmzAnnualHectares, 1), round(lmzAnnualHectares, 1), round(totalAnnualHectares, 1)
                             apzRotation, bmzRotation, lmzRotation, 
                             round(setProportion[0]* 100, 1), round(setProportion[1] * 100, 1), round(setProportion[2] * 100, 1)
                             ]
                     writer.writerow(row)
 
                 for zone in ["APZ", "BMZ", "LMZ"]:
-                    expression = arcpy.AddFieldDelimiters(burnunits_sorted, district_field) + " = '" + district + "' AND " + arcpy.AddFieldDelimiters(burnunits_sorted, zone_field) + " = '" + zone + "' ORDER BY " + arcpy.AddFieldDelimiters(burnunits_sorted, sort_field)
+                    expression = arcpy.AddFieldDelimiters(burnunits, district_field) + " = '" + district + "' AND " + arcpy.AddFieldDelimiters(burnunits, zone_field) + " = '" + zone + "' ORDER BY " + arcpy.AddFieldDelimiters(burnunits, sort_field)
 
                     currentHa = 0
                     currentYear = 1
@@ -447,12 +446,12 @@ class Tool(object):
                         zoneMinimumYears = minRotation[2]
 
                     with arcpy.da.InsertCursor(burnunits_output, lstFields) as outputCursor:
-                        #with arcpy.da.UpdateCursor(burnunits_sorted, lstFields, where_clause=expression) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
-                        with arcpy.da.UpdateCursor(burnunits, lstFields, where_clause=expression, sql_clause = (None, 'ORDER BY "sort"')) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
+
+                        with arcpy.da.UpdateCursor(burnunits, lstFields, where_clause=expression) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
                             for rotation in range(int(zoneRotation)):
                                 for row in cursor:
+
                                     # add gross burn unit are to currentHa
-                                    # arcpy.AddMessage("row = " + str(row))
                                     currentHa += row[lstFields.index(grossarea_field)]
 
                                     # determine which rotation the burn unit is in
@@ -474,42 +473,15 @@ class Tool(object):
                                             row[lstFields.index(season_field)] = season
 
                                             cursor.updateRow(row) 
-                                            
-                                            # send burn unit to output
+
                                             fieldValues = []
                                             for field in row:
                                                 fieldValues.append(field)
+                                            
                                             outputCursor.insertRow(fieldValues)
                                         
                                         # go to next repeat
                                         currentYear += zoneRotation 
-
-            # Create a Phoenix-ready fire history (ie. lastburnt)
-            # Sort replicate by burn unit ID and descending burn date - Using management.Sort instead of SQL sorting the cursor because it was causing failure.
-            # burnunits_output_phx_sort = os.path.splitext(burnunits_output_phx)[0] + '_sort.shp'
-            # expression = (str(id_field) + ' ASCENDING;' + str(burndate_field) + ' DESCENDING')
-
-            # arcpy.management.Sort(burnunits_output, burnunits_output_phx_sort, expression, "UR")
-
-            # # Copy highest dated (most recent burn) to Phoenix file
-            # with arcpy.da.InsertCursor(burnunits_output_phx, lstFields) as outputCursor:
-            #     with arcpy.da.SearchCursor(burnunits_output_phx_sort, lstFields) as cursor:
-            #         previous_buid = "nil"
-            #         for row in cursor:
-            #             current_buid = row[lstFields.index(id_field)]
-            #             if current_buid == previous_buid:
-            #                 # we've already got the highest burn date for this burn unit so do nothing
-            #                 previous_buid = current_buid
-            #             else:
-            #                 # send burn unit to output
-            #                 fieldValues = []
-            #                 for field in row:
-            #                     fieldValues.append(field)
-            #                 outputCursor.insertRow(fieldValues)
-            #                 previous_buid = current_buid
-            
-            # # Delete phx temporary sort shapefile
-            # delete_shapefile(out_folder_path, burnunits_output_phx_sort)
 
         # Incorporate past fire history -- Completely skips this bit if no fire history is provided
         if includeFireHistory == True: 
@@ -550,7 +522,7 @@ class Tool(object):
                 arcpy.AddMessage('Joining fire history to replicate ' + str(replicate))
 
                 strReplicate = ('0' + str(replicate))[-2:]
-                burnunits_output = outputString + '_r' + strReplicate +'.shp'
+                burnunits_output = os.path.join(out_folder_path, outputString) + '_r' + strReplicate +'.shp'
                 #burnunits_output_phx = os.path.splitext(burnunits_output)[0] + '_phx.shp'
 
                 # Map fields for merge
@@ -563,7 +535,6 @@ class Tool(object):
 
                 # do the merge
                 for shapefile in [burnunits_output]: #for shapefile in [burnunits_output, burnunits_output_phx]:
-                    arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
 
                     trim = os.path.splitext(shapefile)[0]
                     merged_output = trim + '_merged.shp'
@@ -577,13 +548,14 @@ class Tool(object):
 
                     # Create raster and run Phoenix Data Converter
                     if runPhoenixDataConverter == True:
+                        arcpy.AddMessage('Converting to Raster then ASCII. Warning: Slow')
                         arcpy.PolygonToRaster_conversion(merged_output, burndate_field, temp_raster, 'MAXIMUM_AREA', burndate_field, cell_size)
                         arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
 
                         # Run Phoenix Data Converter
-                        # Example command line: C:\Data\Phoenix\scripts>"C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
+                        arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
+                        # Example command line: "C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
                         pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe ' + str(temp_ascii) + ' ' + str(phoenix_output) + ' ' + str(cell_size) + ' ' + str(dateString))
-                        arcpy.AddMessage('Phoenix Data Converter: ' + pdc_string)
                         subprocess.call(pdc_string)
 
                     # Clean up unwanted files
@@ -591,7 +563,7 @@ class Tool(object):
                     #os.remove(temp_ascii)
 
         # Delete the burnunits_sorted shapefile 
-        delete_shapefile(out_folder_path, burnunits_sorted)
+        delete_shapefile(out_folder_path, burnunits)
 
         # Close the logfile
         logfile.close()
