@@ -50,3 +50,9 @@ The script will run on any old shapefile, providing it has the required fields. 
     * Buffer points by some small value - e.g. 0.5 meters
     * Union these buffered points with the clipped burn unit layer
 4. Add and populate a net area or burnt area field. This is not required by the tool but might be useful later.
+
+## Script preparation
+If required:
+* Modify the field names to suit the burn units layer (lines 171 ...)
+* Adjust the rotations and weightings per district in districtDictionary (lines 190 ...)
+* Set delete_temporary_files to False to retain raster, ASC and intermediate shapefiles for debugging (line 169)
