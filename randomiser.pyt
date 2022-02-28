@@ -75,7 +75,7 @@ class Tool(object):
             displayName="Include past fire history (Note: Slow! ~5 minutes per replicate)",
             name="fireHistCheckbox",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input")
         
         param8 = arcpy.Parameter(
@@ -95,6 +95,7 @@ class Tool(object):
         param10 = arcpy.Parameter(displayName="Phoenix Data Converter location (directory)",
             name="pdc_location",
             datatype="DEFolder",
+            parameterType="Optional",
             direction="Input")
 
 
