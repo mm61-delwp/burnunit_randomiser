@@ -115,7 +115,7 @@ class Tool(object):
             parameters[8].enabled = False
         
         if parameters[9].value ==True:
-                parameters[10].enabled = True
+            parameters[10].enabled = True
         else:
             parameters[10].enabled = False
             
@@ -139,9 +139,11 @@ class Tool(object):
         yearFinish = int(parameters[5].valueAsText)
         randomChecked = parameters[6].valueAsText
         fireHistChecked = parameters[7].valueAsText
-        fireHistory = parameters[8].valueAsText or "none"
-        runPdcChecked = randomChecked = parameters[9].valueAsText
+        fireHistory = parameters[8].valueAsText
+        runPdcChecked = parameters[9].valueAsText
         phoenixDataConverterLoc = parameters[10].valueAsText 
+
+        # convert usable variables into booleans where required
         if randomChecked == "true":
             randomWithinZones = True
         else:
