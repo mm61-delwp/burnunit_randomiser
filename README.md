@@ -16,11 +16,11 @@ Any number of randomised replicates can be produced.
 ## Outputs
 
 The tool will produce a shapefiles for each replicate:
-* FireHistory_[annual treatment %]_[zones/noZones]_[replicate].shp = overlapping fire history for FAME etc.
+* FireHistory\_[annual treatment %]pc\_[zones/noZones]\_[replicate].shp = overlapping fire history for FAME etc.
 
 Optionally, it can also produce:
-* FireHistory_[annual treatment %]_[zones/noZones]_[replicate]_[merged].shp = as above, but including past fire history
-* FireHistory_[annual treatment %]_[zones/noZones]_[replicate].zip = Phoenix-ready fire history zipfile
+* FireHistory\_[annual treatment %]pc\_[zones/noZones]\_[replicate]\_merged.shp = as above, but including past fire history
+* FireHistory\_[annual treatment %]pc\_[zones/noZones]\_[replicate].zip = Phoenix-ready fire history zipfile
 
 ## Inputs
 
