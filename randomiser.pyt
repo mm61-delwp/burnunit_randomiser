@@ -86,7 +86,7 @@ class Tool(object):
             direction="Input")
 
         param9 = arcpy.Parameter(
-            displayName="Create Phoenix fire history .zip (Note: Slow! ~20 minutes per replicate)",
+            displayName="Create Phoenix fire history .zip (Note: Slow! ~15 minutes per replicate)",
             name="runPhoenixCheckbox",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -173,14 +173,14 @@ class Tool(object):
 
         # Define shapefile attributes
         id_field = 'BUID'
-        region_field = 'DELWP_REGI'
+        region_field = 'FIRE_REG'
         district_field = 'DISTRICT_N'
         zone_field = 'FireFMZ'
-        grossarea_field = 'AreaHa'
+        grossarea_field = 'gross_ha'
         sort_field = 'sort'
         firetype_field = 'FIRETYPE'
         burndate_field = 'Burn_Date'
-        timesincefire_field = 'TSF'
+        timesincefire_field = 'TSF_2022'
         season_field = 'SEASON'
 
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
@@ -190,20 +190,20 @@ class Tool(object):
         # Dictionary holding all district details including rotations & weighting for zone-weighted method
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         districtDictionary = {}
-        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.50]
-        districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.50]
+        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
+        districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.70]
         districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
         districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
         districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
         districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
-        districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.50]
-        districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.50]
-        districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.50]
+        districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.70]
+        districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
+        districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
         districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.50]
+        districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
         districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
         districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
         
@@ -257,7 +257,7 @@ class Tool(object):
 
         # Create a copy of the input shapefile so we're not doing any editing directly in the source file
         newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
-        # try using default geodatabase instead, to enable sorting of cursors
+        # setup a temporary geodatabase, to enable sorting of cursors
         if not arcpy.Exists(out_folder_path + "\\temp.gdb"):
             # create temp file geodatabase
             arcpy.CreateFileGDB_management(out_folder_path, "temp.gdb")
@@ -318,9 +318,11 @@ class Tool(object):
 
             # Make a list of fields in the shapefile
             lstFields = [field.name for field in arcpy.ListFields(burnunits_output) if field.type not in ['Geometry']]
-            lstFields.remove('Shape_Le_1')
-            lstFields.remove('Shape_Area')
-            lstFields.remove('FID')
+            # Remove problematic fields by matching prefixes
+            bad_fields =['FID', 'Shape_']   # catch all variations e.g. 'Shape_Le_1', 'Shape_Leng' ..., which various GIS might truncate 'Shape_Length' to for shapefile. 
+            lstFields = [field_name for field_name in lstFields if not any (bad_field in field_name for bad_field in bad_fields)]
+            # for field_name in ['Shape_Le_1', 'Shape_Leng', 'Shape_Area', 'FID']:
+            #     if field_name in lstFields: lstFields.remove(field_name)
 
             # Sort field list by slicing to ensure first field is sort_field - this enables sorting of cursors later
             sort_field_position = lstFields.index(sort_field)
@@ -468,9 +470,12 @@ class Tool(object):
                         #zoneAnnualHectares = setAnnualHectares[2]
                         zoneRotation = setRotation[2]
                         zoneMinimumYears = minRotation[2]
-
+                    
                     with arcpy.da.InsertCursor(burnunits_output, lstFields) as outputCursor:
                         with arcpy.da.UpdateCursor(burnunits, lstFields, where_clause=expression) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
+                            # arcpy.AddMessage("lstFields = " + str(lstFields))
+                            # arcpy.AddMessage("burnunits fields = " + str([field.name for field in arcpy.ListFields(burnunits)]))
+                            # arcpy.AddMessage("burnunits_output fields = " + str([field.name for field in arcpy.ListFields(burnunits_output)]))
                             for rotation in range(1, int(zoneRotation) + 1):
                                 for row in cursor:
 
@@ -482,7 +487,8 @@ class Tool(object):
                                     # send a copy of this polygon to the output shapefile for each repeat
                                     while currentYear <= yearsSeries:
 
-                                        if row[lstFields.index(timesincefire_field)] >= zoneMinimumYears: # This removes in a rather crude way any burning below minimum rotation. The burn unit will still proceed to later repeats.
+                                        if row[lstFields.index(timesincefire_field)] is None or row[lstFields.index(timesincefire_field)] >= zoneMinimumYears: 
+                                            # ^ This removes in a rather crude way any burning below minimum rotation. The burn unit will still proceed to later repeats. Evaluates to true if TSF field is null.
 
                                             # set burn date
                                             burnDate = (yearStart + currentYear) * 10000 + 401
