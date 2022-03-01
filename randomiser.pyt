@@ -487,7 +487,7 @@ class Tool(object):
                                     # send a copy of this polygon to the output shapefile for each repeat
                                     while currentYear <= yearsSeries:
 
-                                        if row[lstFields.index(timesincefire_field)] is None or row[lstFields.index(timesincefire_field)] >= zoneMinimumYears: 
+                                        if row[lstFields.index(timesincefire_field)] is None or (row[lstFields.index(timesincefire_field)] + currentYear) >= zoneMinimumYears: 
                                             # ^ This removes in a rather crude way any burning below minimum rotation. The burn unit will still proceed to later repeats. Evaluates to true if TSF field is null.
 
                                             # set burn date
