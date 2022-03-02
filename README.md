@@ -51,7 +51,7 @@ The script will run on any old shapefile, providing it has the required fields. 
     * Union these buffered points with the clipped burn unit layer
 4. Add and populate a net area or burnt area field. This is not required by the tool but might be useful later.
 
-**_Note: The above preparation has already been completed for the zipped shapefile in this git_**
+**_Note: The above preparation has already been completed for the zipped shapefile in this repository_**
 
 ## Script preparation
 If required:
