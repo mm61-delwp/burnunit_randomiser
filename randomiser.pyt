@@ -169,7 +169,7 @@ class Tool(object):
         arcpy.AddMessage("phoenixDataConverterLoc = " + str(phoenixDataConverterLoc))
 
         # Should temporary files be removed (True) or retained for debugging purposes?
-        delete_temporary_files = True
+        delete_temporary_files = False
 
         # Define shapefile attributes
         id_field = 'BUID'
@@ -190,22 +190,22 @@ class Tool(object):
         # Dictionary holding all district details including rotations & weighting for zone-weighted method
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         districtDictionary = {}
-        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
+        #districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
         districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.70]
-        districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
-        districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
-        districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
-        districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
+        #districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        #districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        #districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
+        #districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
+        #districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
+        #districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
         districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.70]
-        districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
+        #districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
         districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
-        districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        #districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        #districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
-        districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
-        districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
+        #districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
+        #districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
         
         # Function to delete all parts of a shapefile
         def delete_shapefile(directory, shapefile_name):
@@ -285,7 +285,7 @@ class Tool(object):
         logfile = open(os.path.join(out_folder_path, logfileName), 'w', newline='')
         writer = csv.writer(logfile)
 
-        writer.writerow(["burnunits = " + str(burnunits)])
+        writer.writerow(["burnunits = " + str(parameters[0].valueAsText)])
         writer.writerow(["out_folder_path = " + str(out_folder_path)])
         writer.writerow(["treatmentPercentage = " + str(treatmentPercentage)])
         writer.writerow(["replicates = " + str(replicates)])
@@ -343,34 +343,34 @@ class Tool(object):
                 # Create an expression with proper delimiters
                 expression = arcpy.AddFieldDelimiters(burnunits, district_field) + " = '" + district + "'"
                 
-                selectedArea = [0, 0, 0, 0]      # [APZ, BMZ, LMZ, PBEZ] selected hectares
+                zoneArea = [0, 0, 0, 0]      # [APZ, BMZ, LMZ, PBEZ] selected hectares
 
                 # Calculate gross hectares per zone - I'm sure there's a more efficient way to do this but it works!
                 with arcpy.da.SearchCursor(burnunits, [id_field, region_field, district_field, zone_field, grossarea_field], where_clause=expression) as cursor:
                     for row in cursor:
                         if row[3] == "APZ":
-                            selectedArea[0] += row[4]
+                            zoneArea[0] += row[4]
                         elif row[3] == "BMZ":
-                            selectedArea[1] += row[4]
+                            zoneArea[1] += row[4]
                         elif row[3] == "LMZ":
-                            selectedArea[2] += row[4]
+                            zoneArea[2] += row[4]
                         elif row[3] == "PBEZ":
-                            selectedArea[3] += row[4]
-                totalHectaresExPBEZ = sum(selectedArea) - selectedArea[3]
+                            zoneArea[3] += row[4]
+                totalHectaresExPBEZ = sum(zoneArea) - zoneArea[3]
 
                 # Determine the rotations and annual hectares required for each zone
                 # Rotation is the number of years to divide the zone into, which is also the number of years between repeat treatments for each burn unit
                 totalAnnualHectares = totalHectaresExPBEZ * (treatmentPercentage / 100)
 
                 # Calculate requirements for random selection within districts. Also used to weight selection within zones.
-                rand_apzAnnualHectares = (selectedArea[0] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_apzRotation = math.trunc(selectedArea[0]/rand_apzAnnualHectares)
-                rand_bmzAnnualHectares = (selectedArea[1] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_bmzRotation = math.trunc(selectedArea[1]/rand_bmzAnnualHectares)
-                rand_lmzAnnualHectares = (selectedArea[2] / totalHectaresExPBEZ) * totalAnnualHectares
-                rand_lmzRotation = math.trunc(selectedArea[2]/rand_lmzAnnualHectares)
-                rand_setAnnualHectares = [rand_apzAnnualHectares, rand_bmzAnnualHectares, rand_lmzAnnualHectares]
-                rand_setRotation = [rand_apzRotation, rand_bmzRotation, rand_lmzRotation]
+                rand_apzAnnualHectares = (zoneArea[0] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_apzRotation = math.trunc(zoneArea[0]/rand_apzAnnualHectares)
+                rand_bmzAnnualHectares = (zoneArea[1] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_bmzRotation = math.trunc(zoneArea[1]/rand_bmzAnnualHectares)
+                rand_lmzAnnualHectares = (zoneArea[2] / totalHectaresExPBEZ) * totalAnnualHectares
+                rand_lmzRotation = math.trunc(zoneArea[2]/rand_lmzAnnualHectares)
+                rand_zonesAnnualHectares = [rand_apzAnnualHectares, rand_bmzAnnualHectares, rand_lmzAnnualHectares]
+                rand_zonesRotations = [rand_apzRotation, rand_bmzRotation, rand_lmzRotation]
 
                 # Calculate requirements for selection within zones
                 ## Get the Min and Max rotations for current district
@@ -378,8 +378,8 @@ class Tool(object):
                 maxRotation = districtDictionary.get(district)[2]
 
                 # Now turn these into hectares and proportions
-                minHa = [(selectedArea[0] / maxRotation[0]), (selectedArea[1] / maxRotation[1]), (selectedArea[2]/maxRotation[2])]
-                maxHa = [(selectedArea[0] / minRotation[0]), (selectedArea[1] / minRotation[1]), (selectedArea[2]/minRotation[2])]
+                minHa = [(zoneArea[0] / maxRotation[0]), (zoneArea[1] / maxRotation[1]), (zoneArea[2]/maxRotation[2])]
+                maxHa = [(zoneArea[0] / minRotation[0]), (zoneArea[1] / minRotation[1]), (zoneArea[2]/minRotation[2])]
                 minHaApzBmz = minHa[0] + minHa[1]
                 minHaApzBmzLmz = minHa[0] + minHa[1] + minHa[2]
                 proportionMinHaApzBmz = [(minHa[0] / minHaApzBmz), (minHa[1] / minHaApzBmz)]
@@ -394,22 +394,22 @@ class Tool(object):
                     bmzRotation = rand_bmzRotation
                     lmzAnnualHectares = rand_lmzAnnualHectares
                     lmzRotation = rand_lmzRotation
-                    setAnnualHectares = rand_setAnnualHectares
-                    setRotation = rand_setRotation
+                    zonesAnnualHectares = rand_zonesAnnualHectares
+                    zonesRotations = rand_zonesRotations
                     setProportion = [(apzAnnualHectares / totalAnnualHectares), (bmzAnnualHectares / totalAnnualHectares), (lmzAnnualHectares / totalAnnualHectares)]
 
                 elif randomWithinZones:
                     # Is annual hectares < required to treat APZ & BMZ at minimum rotation?
                     if totalAnnualHectares <= minHaApzBmz:
-                        apzHa = totalAnnualHectares * proportionMinHaApzBmz[0]
-                        bmzHa = totalAnnualHectares * proportionMinHaApzBmz[1]
-                        lmzHa = 0
+                        apzAnnualHectares = totalAnnualHectares * proportionMinHaApzBmz[0]
+                        bmzAnnualHectares = totalAnnualHectares * proportionMinHaApzBmz[1]
+                        lmzAnnualHectares = 1
                     else:
                         # APZ and BMZ can't be pushed past their minimum rotation (max ha), so hectares are proportionally allocated across all 3 zones until these limits are reached, then sent to LMZ
-                        apzHa = min(maxHa[0], minHa[0] + (totalAnnualHectares - minHaApzBmz) * proportionMinHaApzBmzLmz[0])
-                        bmzHa = min(maxHa[1], minHa[1] + (totalAnnualHectares - minHaApzBmz) * proportionMinHaApzBmzLmz[1])
-                        lmzHa = totalAnnualHectares - (apzHa + bmzHa)
-                        setProportionZones = [(apzHa/totalAnnualHectares), (bmzHa/totalAnnualHectares), (lmzHa/totalAnnualHectares)]
+                        apzAnnualHectares = min(maxHa[0], minHa[0] + (totalAnnualHectares - minHaApzBmz) * proportionMinHaApzBmzLmz[0])
+                        bmzAnnualHectares = min(maxHa[1], minHa[1] + (totalAnnualHectares - minHaApzBmz) * proportionMinHaApzBmzLmz[1])
+                        lmzAnnualHectares = totalAnnualHectares - (apzAnnualHectares + bmzAnnualHectares)
+                        setProportionZones = [(apzAnnualHectares/totalAnnualHectares), (bmzAnnualHectares/totalAnnualHectares), (lmzAnnualHectares/totalAnnualHectares)]
                     
                     # Now we weight these to produce something between full random within zones and random without zones
                     zonalWeighting = districtDictionary.get(district)[3]    # pulls zone weighting from table
@@ -420,14 +420,14 @@ class Tool(object):
                     setProportion = [setProportionWeighted[0] * tempTotal, setProportionWeighted[1] * tempTotal, setProportionWeighted[2] * tempTotal]
 
                     # Use these proportions to calculate annual hectare requirements & rotations
-                    apzAnnualHectares = setProportion[0] * totalAnnualHectares
-                    apzRotation = math.trunc(selectedArea[0]/apzAnnualHectares)
-                    bmzAnnualHectares = setProportion[1] * totalAnnualHectares
-                    bmzRotation = math.trunc(selectedArea[1]/bmzAnnualHectares)
-                    lmzAnnualHectares = setProportion[2] * totalAnnualHectares
-                    lmzRotation = math.trunc(selectedArea[2]/lmzAnnualHectares)
-                    setAnnualHectares = [apzAnnualHectares, bmzAnnualHectares, lmzAnnualHectares]
-                    setRotation = [apzRotation, bmzRotation, lmzRotation]
+                    apzRotation = math.trunc(zoneArea[0]/apzAnnualHectares)
+                    apzAnnualHectares = zoneArea[0] / apzRotation
+                    bmzRotation = math.trunc(zoneArea[1]/bmzAnnualHectares)
+                    bmzAnnualHectares = zoneArea[1] / bmzRotation
+                    lmzRotation = math.trunc(zoneArea[2]/lmzAnnualHectares)
+                    lmzAnnualHectares = zoneArea[2] / lmzRotation
+                    zonesAnnualHectares = [apzAnnualHectares, bmzAnnualHectares, lmzAnnualHectares]
+                    zonesRotations = [apzRotation, bmzRotation, lmzRotation]
 
                 # Send some information to the geoprocessing messages screen, but only do it once.
                 if replicate == 1:
@@ -438,7 +438,7 @@ class Tool(object):
 
                     # Send same information to the logfile
                     row =   [district, region, 
-                            round(selectedArea[0], 1), round(selectedArea[1], 1), round(selectedArea[2], 1), round(selectedArea[3], 1), round(sum(selectedArea), 1),
+                            round(zoneArea[0], 1), round(zoneArea[1], 1), round(zoneArea[2], 1), round(zoneArea[3], 1), round(sum(zoneArea), 1),
                             districtDictionary.get(district)[1][0], districtDictionary.get(district)[2][0],
                             districtDictionary.get(district)[1][1], districtDictionary.get(district)[2][1],
                             districtDictionary.get(district)[3], 1 - districtDictionary.get(district)[3],
@@ -452,37 +452,31 @@ class Tool(object):
                     expression = arcpy.AddFieldDelimiters(burnunits, district_field) + " = '" + district + "' AND " + arcpy.AddFieldDelimiters(burnunits, zone_field) + " = '" + zone + "' ORDER BY " + arcpy.AddFieldDelimiters(burnunits, sort_field)
 
                     currentHa = 0
-                    currentYear = 1
-                    currentRotation = 1
+                    currentYear = 0
+                    currentRotation = 0
 
                     if zone == "APZ":
-                        zoneAnnualHectares = selectedArea[0] / setRotation[0] 
-                        #zoneAnnualHectares = setAnnualHectares[0]
-                        zoneRotation = setRotation[0]
+                        zoneAnnualHectares = zonesAnnualHectares[0]
+                        zoneRotation = zonesRotations[0]
                         zoneMinimumYears = minRotation[0]
                     elif zone == "BMZ":
-                        zoneAnnualHectares = selectedArea[1] / setRotation[1] 
-                        #zoneAnnualHectares = setAnnualHectares[1]
-                        zoneRotation = setRotation[1]
+                        zoneAnnualHectares = zonesAnnualHectares[1]
+                        zoneRotation = zonesRotations[1]
                         zoneMinimumYears = minRotation[1]
                     elif zone == "LMZ":
-                        zoneAnnualHectares = selectedArea[2] / setRotation[2] 
-                        #zoneAnnualHectares = setAnnualHectares[2]
-                        zoneRotation = setRotation[2]
+                        zoneAnnualHectares = zonesAnnualHectares[2]
+                        zoneRotation = zonesRotations[2]
                         zoneMinimumYears = minRotation[2]
                     
                     with arcpy.da.InsertCursor(burnunits_output, lstFields) as outputCursor:
                         with arcpy.da.UpdateCursor(burnunits, lstFields, where_clause=expression) as cursor: # The order of values in the list matches the order of fields specified by the field_names argument.
-                            # arcpy.AddMessage("lstFields = " + str(lstFields))
-                            # arcpy.AddMessage("burnunits fields = " + str([field.name for field in arcpy.ListFields(burnunits)]))
-                            # arcpy.AddMessage("burnunits_output fields = " + str([field.name for field in arcpy.ListFields(burnunits_output)]))
                             for rotation in range(1, int(zoneRotation) + 1):
                                 for row in cursor:
 
                                     # add gross burn unit are to currentHa
                                     currentHa += row[lstFields.index(grossarea_field)]
 
-                                    currentYear = currentRotation - 1
+                                    currentYear = currentRotation
 
                                     # send a copy of this polygon to the output shapefile for each repeat
                                     while currentYear <= yearsSeries:
@@ -510,7 +504,7 @@ class Tool(object):
                                         currentYear += zoneRotation 
 
                                     # determine which rotationt we are currently in
-                                    currentRotation = math.floor(currentHa / zoneAnnualHectares) + 1
+                                    currentRotation = math.floor(currentHa / zoneAnnualHectares) 
         
             # Add additional table to log file detailing actual annual hectares per district & Zone
             # District, Region, FMZ, Replicate, [Year1], [Year2], ...
