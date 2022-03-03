@@ -2,7 +2,8 @@
 
 import arcpy, random, math, os, glob, csv, subprocess
 from datetime import datetime
-
+from zipfile import ZipFile
+from subprocess import Popen
 
 class Toolbox(object):
     def __init__(self):
@@ -168,8 +169,11 @@ class Tool(object):
         arcpy.AddMessage("runPhoenixDataConverter = " + str(runPhoenixDataConverter))
         arcpy.AddMessage("phoenixDataConverterLoc = " + str(phoenixDataConverterLoc))
 
-        # Should temporary files be removed (True) or retained for debugging purposes?
+        # Should temporary files be removed (True) or retained for debugging purposes (False)?
         delete_temporary_files = False
+
+        # Run multiple copies of Phoenix Data Converter.exe concurrently (True) or halt everything until it completes one at a time (False)?
+        run_multiple_pdcs = True
 
         # Define shapefile attributes
         id_field = 'BUID'
@@ -289,13 +293,14 @@ class Tool(object):
         writer.writerow(["out_folder_path = " + str(out_folder_path)])
         writer.writerow(["treatmentPercentage = " + str(treatmentPercentage)])
         writer.writerow(["replicates = " + str(replicates)])
+        writer.writerow(["yearStart:", yearStart, "yearFinish:", yearFinish])
         writer.writerow(["randomWithinZones = " + str(randomWithinZones)])
         writer.writerow(["includeFireHistory = " + str(includeFireHistory)])
         writer.writerow(["fireHistory = " + str(fireHistory)])
         writer.writerow(["runPhoenixDataConverter = " + str(runPhoenixDataConverter)])
         writer.writerow(["phoenixDataConverterLoc = " + str(phoenixDataConverterLoc)])
         writer.writerow(' ')
-        writer.writerow(["District calculations table - all replicates"])
+        writer.writerow(["District calculations table"])
         header =    ['district', 'region', 
                     'apz_total_ha', 'bmz_total_ha', 'lmz_total_ha', 'pbez_total_ha', 'fmz_ha', 
                     'apz_min_rot', 'apz_max_rot', 'bmz_min_rot', 'bmz_max_rot', 
@@ -404,6 +409,7 @@ class Tool(object):
                         apzAnnualHectares = totalAnnualHectares * proportionMinHaApzBmz[0]
                         bmzAnnualHectares = totalAnnualHectares * proportionMinHaApzBmz[1]
                         lmzAnnualHectares = 1
+                        setProportionZones = [(apzAnnualHectares/totalAnnualHectares), (bmzAnnualHectares/totalAnnualHectares), (lmzAnnualHectares/totalAnnualHectares)]
                     else:
                         # APZ and BMZ can't be pushed past their minimum rotation (max ha), so hectares are proportionally allocated across all 3 zones until these limits are reached, then sent to LMZ
                         apzAnnualHectares = min(maxHa[0], minHa[0] + (totalAnnualHectares - minHaApzBmz) * proportionMinHaApzBmzLmz[0])
@@ -511,10 +517,10 @@ class Tool(object):
             #      ...,    ..., ...,       ...,      Ha,      Ha, ...
             if replicate == 1:
                 writer.writerow(' ')    # leave space between tables
-                writer.writerow(["Annual gross hectares per district & zone" + str(replicate)])   # table name
+                writer.writerow(["Annual gross hectares per district & zone"])   # table name
 
                 # Write header row
-                table_headers = ['District', 'Region', 'FMZ', 'Replicate'] + [*range(yearStart, yearFinish + 1)]     # * in unpacking operator 
+                table_headers = ['District', 'Region', 'FMZ', 'Replicate'] + [*range(yearStart, yearFinish + 1)]     # asterix is unpacking operator 
                 writer.writerow(table_headers)
             
             # Calculate hectares
@@ -593,8 +599,17 @@ class Tool(object):
                 merged_output = trim + '_merged.shp'
                 arcpy.Merge_management([fireHistory, burnunits_output], merged_output, field_mappings)
 
-        # Create raster and run Phoenix Data Converter
+                # create zipfile for storage & transport
+                shapefile_parts_list = [trim + '_merged.shp', trim + '_merged.shx', trim + '_merged.dbf', trim + '_merged.prj']
+                zipfile_name = trim + '_FAME.zip'
+                with ZipFile(zipfile_name, 'w', zipfile.ZIP_DEFLATED) as zipObj:
+                    for shapefile_part in shapefile_parts_list:
+                        zipObj.write(shapefile_part, os.path.split(shapefile_part)[1])
+
+
+        # Create rasters (split out Phoenix data converter so ASCII files will be produced even if data converter fails)
         if runPhoenixDataConverter:
+            list_output_asciis = []
             for replicate in range (1, replicates + 1):
 
                 # set up correct file names and paths
@@ -610,24 +625,42 @@ class Tool(object):
 
                 temp_raster = 'temp_raster'
                 temp_ascii = trim + '.ASC'
-                phoenix_output = trim + '.zip'
                 cell_size = 30
-                dateString = (str(yearFinish) + '-06-30')
 
-                arcpy.AddMessage('Converting to Raster then ASCII. Warning: Slow')
+                arcpy.AddMessage('Converting to Raster then ASCII. Warning: Slow! - replicate ' + str(replicate))
                 arcpy.PolygonToRaster_conversion(input_shapefile, burndate_field, temp_raster, 'MAXIMUM_AREA', burndate_field, cell_size)
                 arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
 
-                # Run Phoenix Data Converter
-                arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
+                list_output_asciis.append(temp_ascii)
+
+        # Run Phoenix Data Converter
+        if runPhoenixDataConverter:
+            list_pdc_strings = []
+            for ascii in list_output_asciis:
+                phoenix_output = os.path.splitext(ascii)[0] + '.zip'
+
+                cell_size = 30
+                dateString = (str(yearFinish) + '-06-30')
+                
                 # Example command line: "C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
                 pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe ' + str(temp_ascii) + ' ' + str(phoenix_output) + ' ' + str(cell_size) + ' ' + str(dateString))
-                subprocess.call(pdc_string)
+
+                if not run_multiple_pdcs:
+                    arcpy.AddMessage('Converting ASCII to Phoenix data files. Warning: Slow! - replicate ' + str(replicate))
+                    subprocess.call(pdc_string)
+                else:
+                    list_pdc_strings.append(pdc_string)
 
                 # Clean up unwanted files
                 if delete_temporary_files:
                     arcpy.Delete_management(temp_raster)
                     os.remove(temp_ascii)
+
+            if run_multiple_pdcs:
+                arcpy.AddMessage('Converting ' +str(count(list_pdc_strings)) ' ASCIIs to Phoenix data files. Warning: Slow')
+                procs = [ Popen(i) for i in list_pdc_strings ]
+                for p in procs:
+                    p.wait()
 
         # Delete the burnunits_sorted feature class
         if delete_temporary_files: 
