@@ -17,7 +17,7 @@ class Toolbox(object):
 class Tool(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Phoenix Future Fire History Maker"
+        self.label = "Future Fire History Maker"
         self.description = ""
         self.canRunInBackground = False
 
@@ -190,22 +190,22 @@ class Tool(object):
         # Dictionary holding all district details including rotations & weighting for zone-weighted method
         ## Dictionary format ['DISTRICT NAME'] = ['Region Name', [minYrsAPZ, minYrsBMZ, minYrsLMZ], [maxYrsAPZ, maxYrsBMZ, maxYrsLMZ], zoneWeighting]
         districtDictionary = {}
-        #districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
+        districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
         districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.70]
-        #districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        #districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        #districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
-        #districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
-        #districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
-        #districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
+        districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
+        districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
+        districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
+        districtDictionary['MURRAY GOLDFIELDS'] = ['Loddon Mallee',       [6, 12, 15],  [15, 30, 50],   0.50]
         districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.70]
-        #districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
+        districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
         districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
-        #districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        #districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
-        #districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
-        #districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
+        districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
+        districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
         
         # Function to delete all parts of a shapefile
         def delete_shapefile(directory, shapefile_name):
@@ -308,7 +308,7 @@ class Tool(object):
 
         for replicate in range (1, replicates + 1):
                     
-            arcpy.AddMessage("Processing replicate " + str(replicate))
+            arcpy.AddMessage("Creating burn schedule for " + str(yearStart) + " to " + str(yearFinish) + " - replicate " + str(replicate))
 
             # Duplicate the burn units layer then empty it out (so we've got a shapefile to dump stuff in later)
             strReplicate = ('0' + str(replicate))[-2:]
@@ -589,34 +589,45 @@ class Tool(object):
                     field_mappings.addFieldMap(field_map)
 
                 # do the merge
-                for shapefile in [burnunits_output]: #for shapefile in [burnunits_output, burnunits_output_phx]:
+                trim = os.path.splitext(burnunits_output)[0]
+                merged_output = trim + '_merged.shp'
+                arcpy.Merge_management([fireHistory, burnunits_output], merged_output, field_mappings)
 
-                    trim = os.path.splitext(shapefile)[0]
-                    merged_output = trim + '_merged.shp'
-                    temp_raster = 'temp_raster'
-                    temp_ascii = trim + '.ASC'
-                    phoenix_output = trim + '.zip'
-                    cell_size = 30
-                    dateString = (str(yearFinish) + '-06-30')
+        # Create raster and run Phoenix Data Converter
+        if runPhoenixDataConverter:
+            for replicate in range (1, replicates + 1):
 
-                    arcpy.Merge_management([fireHistory, burnunits_output], merged_output, field_mappings)
+                # set up correct file names and paths
+                strReplicate = ('0' + str(replicate))[-2:]
+                burnunits_output = os.path.join(out_folder_path, outputString) + '_r' + strReplicate +'.shp'
+                trim = os.path.splitext(burnunits_output)[0]
+                
+                # selects whether to use _merged.shp or regular, - did user ask for merge or not?
+                if includeFireHistory:
+                    input_shapefile = trim + '_merged.shp'
+                else:
+                    input_shapefile = trim + '.shp'
 
-                    # Create raster and run Phoenix Data Converter
-                    if runPhoenixDataConverter:
-                        arcpy.AddMessage('Converting to Raster then ASCII. Warning: Slow')
-                        arcpy.PolygonToRaster_conversion(merged_output, burndate_field, temp_raster, 'MAXIMUM_AREA', burndate_field, cell_size)
-                        arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
+                temp_raster = 'temp_raster'
+                temp_ascii = trim + '.ASC'
+                phoenix_output = trim + '.zip'
+                cell_size = 30
+                dateString = (str(yearFinish) + '-06-30')
 
-                        # Run Phoenix Data Converter
-                        arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
-                        # Example command line: "C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
-                        pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe ' + str(temp_ascii) + ' ' + str(phoenix_output) + ' ' + str(cell_size) + ' ' + str(dateString))
-                        subprocess.call(pdc_string)
+                arcpy.AddMessage('Converting to Raster then ASCII. Warning: Slow')
+                arcpy.PolygonToRaster_conversion(input_shapefile, burndate_field, temp_raster, 'MAXIMUM_AREA', burndate_field, cell_size)
+                arcpy.RasterToASCII_conversion(temp_raster, temp_ascii)
 
-                    # Clean up unwanted files
-                    if delete_temporary_files:
-                        arcpy.Delete_management(temp_raster)
-                        os.remove(temp_ascii)
+                # Run Phoenix Data Converter
+                arcpy.AddMessage('Converting to Phoenix data file. Warning: Slow')
+                # Example command line: "C:\Data\Phoenix\scripts\Phoenix Data Converter.exe" D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01.ASC D:\Projects\20220202_Risk2_TargetSetting\bu_scheduler\outputs\burnunits_v2_12-0pc_zones_2020to2040_r01 30 2040-06-30
+                pdc_string = (phoenixDataConverterLoc + '\Phoenix Data Converter.exe ' + str(temp_ascii) + ' ' + str(phoenix_output) + ' ' + str(cell_size) + ' ' + str(dateString))
+                subprocess.call(pdc_string)
+
+                # Clean up unwanted files
+                if delete_temporary_files:
+                    arcpy.Delete_management(temp_raster)
+                    os.remove(temp_ascii)
 
         # Delete the burnunits_sorted feature class
         if delete_temporary_files: 
