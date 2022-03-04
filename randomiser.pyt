@@ -186,6 +186,8 @@ class Tool(object):
         timesincefire_field = 'TSF_2022'
         season_field = 'SEASON'
 
+        firehistory_source_field = 'Source'
+
         zones = ['APZ', 'BMZ', 'LMZ', 'PBEZ']
         strPercentage = ('000' + (str(treatmentPercentage)).replace(".", "-"))[-4:]
         strZones = 'zones' if randomWithinZones else 'nozones'
@@ -554,7 +556,7 @@ class Tool(object):
             with arcpy.da.UpdateCursor(fireHistory, lstFields_fireHistory) as cursor:
                 for row in cursor:
                     needs_update = False
-                    sourceValue = row[lstFields_fireHistory.index("Source")]
+                    sourceValue = row[lstFields_fireHistory.index(firehistory_source_field)]
                     burndateValue = row[lstFields_fireHistory.index(burndate_field)]
                     
                     # speed things up by only updating rows if required
@@ -568,7 +570,7 @@ class Tool(object):
                             row[lstFields_fireHistory.index(firetype_field)] = 'BUSHFIRE'
                         
                         row[lstFields_fireHistory.index(season_field)] = seasonValue
-                        needs_update = true
+                        needs_update = True
                     if needs_update:
                         cursor.updateRow(row)
 
@@ -596,7 +598,7 @@ class Tool(object):
                 # create zipfile for storage & transport
                 shapefile_parts_list = [trim + '_merged.shp', trim + '_merged.shx', trim + '_merged.dbf', trim + '_merged.prj']
                 zipfile_name = trim + '_FAME.zip'
-                with zipfile.ZipFile(zipfile_name, 'w', compression=zipfile.ZIP_DEFLATED) as zipObj:
+                with zipfile.ZipFile(zipfile_name, 'w', compression=zipfile.ZIP_DEFLATED) as zipObj: 
                     for shapefile_part in shapefile_parts_list:
                         zipObj.write(shapefile_part, os.path.split(shapefile_part)[1])
 
