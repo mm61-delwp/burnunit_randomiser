@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import arcpy, random, math, os, glob, csv, subprocess, zipfile
 from datetime import datetime
 from subprocess import Popen
@@ -12,7 +10,6 @@ class Toolbox(object):
 
         # List of tool classes associated with this toolbox
         self.tools = [Tool]
-
 
 class Tool(object):
     def __init__(self):
@@ -112,7 +109,6 @@ class Tool(object):
             parameterType="Optional",
             direction="Input")
 
-
         params = [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12]
         return params
 
@@ -145,7 +141,7 @@ class Tool(object):
     def execute(self, parameters, messages):
         # Set environment & fix output extent to standard Phoenix data extent
         arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("GDA 1994 VICGRID94")
-        arcpy.env.extent = arcpy.Extent(2036000, 2251970, 2965280, 2842370)
+        arcpy.env.extent = arcpy.Extent(2036000, 2251970, 2965280, 2842370)  # (XMin, YMin, XMax, YMax)
 
         # Turn the tool parameters into usable variables
         burnunits = parameters[0].valueAsText
@@ -317,7 +313,6 @@ class Tool(object):
         writer.writerow(header)
 
 
-
         ### Calculate hectares and rotations per district and zone        
         arcpy.AddMessage("Calculating hectares and rotations")
         
@@ -452,7 +447,7 @@ class Tool(object):
                     row[0] = random.random()
                     cursor.updateRow(row)
             
-            # Calcualte hectare requirements and produce output shapefiles
+            # Calculate hectare requirements and produce output shapefiles
             for district in districtDictionary.keys():
                 region = districtDictionary.get(district)[0]
                 zonesAnnualHectares = districtDictionary.get(district)[4]
