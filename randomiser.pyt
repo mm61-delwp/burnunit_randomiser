@@ -195,8 +195,8 @@ class Tool(object):
         districtDictionary = {}
         districtDictionary['FAR SOUTH WEST']    = ['Barwon South West',   [5, 8, 15],   [8, 20, 50],    0.65]
         districtDictionary['GOULBURN']          = ['Hume',                [6, 12, 15],  [8, 15, 50],    0.70]
-        districtDictionary['LATROBE']           = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['MACALISTER']        = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['LATROBE']           = ['Gippsland',           [5, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['MACALISTER']        = ['Gippsland',           [5, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['MALLEE']            = ['Loddon Mallee',       [5, 17, 15],  [12, 21, 50],   0.75]
         districtDictionary['METROPOLITAN']      = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.50]
         districtDictionary['MIDLANDS']          = ['Grampians',           [7, 12, 15],  [9, 14, 50],    0.75]
@@ -204,8 +204,8 @@ class Tool(object):
         districtDictionary['MURRINDINDI']       = ['Hume',                [5, 8, 15],   [12, 15, 50],   0.70]
         districtDictionary['OTWAY']             = ['Barwon South West',   [5, 8, 15],   [8, 13, 50],    0.65]
         districtDictionary['OVENS']             = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
-        districtDictionary['SNOWY']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
-        districtDictionary['TAMBO']             = ['Gippsland',           [4, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['SNOWY']             = ['Gippsland',           [5, 8, 15],   [8, 15, 50],    0.60]
+        districtDictionary['TAMBO']             = ['Gippsland',           [5, 8, 15],   [8, 15, 50],    0.60]
         districtDictionary['UPPER MURRAY']      = ['Hume',                [9, 15, 15],  [11, 20, 50],   0.70]
         districtDictionary['WIMMERA']           = ['Grampians',           [6, 12, 15],  [8, 14, 50],    0.90]
         districtDictionary['YARRA']             = ['Port Phillip',        [5, 8, 15],   [8, 15, 50],    0.80]
@@ -258,11 +258,9 @@ class Tool(object):
             else:
                 return int(year) + 1
 
-        # Create a copy of the input shapefile so we're not doing any editing directly in the source file
+        # Create a copy of the input shapefile so we're not doing any editing directly in the source file, using file geodatabase to enable sorting of cursors
         newburnunits = out_folder_path + '\\' + os.path.split(burnunits)[1]
-        # setup a temporary geodatabase, to enable sorting of cursors
         if not arcpy.Exists(out_folder_path + "\\temp.gdb"):
-            # create temp file geodatabase
             arcpy.CreateFileGDB_management(out_folder_path, "temp.gdb")
         newburnunits = out_folder_path + "\\temp.gdb\\burnunits"
         arcpy.CopyFeatures_management(burnunits, newburnunits)
