@@ -98,8 +98,22 @@ class Tool(object):
             parameterType="Optional",
             direction="Input")
 
+        param11 = arcpy.Parameter(
+            displayName="Run Phoenix Data Converter sessions concurrently",
+            name="runConcurrentlyCheckbox",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
 
-        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10]
+        param12 = arcpy.Parameter(
+            displayName="Delete temporary files (ASC, raster)",
+            name="deleteTempCheckbox",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
+
+
+        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12]
         return params
 
     def isLicensed(self):
@@ -116,9 +130,12 @@ class Tool(object):
         
         if parameters[9].value ==True:
             parameters[10].enabled = True
+            parameters[11].enabled = True
+            parameters[12].enabled = True
         else:
             parameters[10].enabled = False
-            
+            parameters[11].enabled = False
+            parameters[12].enabled = False            
         return
 
     def updateMessages(self, parameters):
@@ -137,25 +154,14 @@ class Tool(object):
         replicates = int(parameters[3].valueAsText)
         yearStart = int(parameters[4].valueAsText)
         yearFinish = int(parameters[5].valueAsText)
-        randomChecked = parameters[6].valueAsText
-        fireHistChecked = parameters[7].valueAsText
         fireHistory = parameters[8].valueAsText
-        runPdcChecked = parameters[9].valueAsText
-        phoenixDataConverterLoc = parameters[10].valueAsText 
+        phoenixDataConverterLoc = parameters[10].valueAsText
+        randomWithinZones = (False, True)[parameters[6].valueAsText == "true"]
+        includeFireHistory = (False, True)[parameters[7].valueAsText == "true"]
+        runPhoenixDataConverter = (False, True)[parameters[9].valueAsText == "true"]
+        run_multiple_pdcs = (False, True)[parameters[11].valueAsText == "true"]
+        delete_temporary_files = (False, True)[parameters[12].valueAsText == "true"]
 
-        # convert usable variables into booleans where required
-        if randomChecked == "true":
-            randomWithinZones = True
-        else:
-            randomWithinZones = False
-        if fireHistChecked == "true":
-            includeFireHistory = True
-        else:
-            includeFireHistory = False
-        if runPdcChecked == "true":
-            runPhoenixDataConverter = True
-        else:
-            runPhoenixDataConverter = False
         yearsSeries = yearFinish - yearStart
 
         arcpy.AddMessage("burnunits = " + burnunits)
@@ -167,12 +173,6 @@ class Tool(object):
         arcpy.AddMessage("fireHistory = " + str(fireHistory))
         arcpy.AddMessage("runPhoenixDataConverter = " + str(runPhoenixDataConverter))
         arcpy.AddMessage("phoenixDataConverterLoc = " + str(phoenixDataConverterLoc))
-
-        # Should temporary files be removed (True) or retained for debugging purposes (False)?
-        delete_temporary_files = False
-
-        # Run multiple copies of Phoenix Data Converter.exe concurrently (True) or halt everything until it completes one at a time (False)?
-        run_multiple_pdcs = True
 
         # Define shapefile attributes
         id_field = 'BUID'
@@ -268,6 +268,12 @@ class Tool(object):
         arcpy.CopyFeatures_management(burnunits, newburnunits)
         outputString = 'FireHistory_' + strPercentage + 'pc_' + strZones + '_' + str(yearStart) + 'to' + str(yearFinish)
         burnunits = newburnunits
+
+        # Create a copy of the firehistory shapefile so we're not doing any editing directly in the source file, using file geodatabase
+        if includeFireHistory:
+            new_firehistory = out_folder_path + "\\temp.gdb\\firehistory"
+            arcpy.CopyFeatures_management(fireHistory, new_firehistory)
+            fireHistory = new_firehistory
 
         # Prepare the input shapefile
         add_field(burnunits, sort_field, "DOUBLE", 6, 4)
@@ -629,6 +635,9 @@ class Tool(object):
 
                 list_output_asciis.append(temp_ascii)
 
+                if delete_temporary_files:
+                    arcpy.Delete_management(temp_raster)
+
         ### Run Phoenix Data Converter
         if runPhoenixDataConverter:
             list_pdc_strings = []
@@ -647,16 +656,16 @@ class Tool(object):
                 else:
                     list_pdc_strings.append(pdc_string)
 
-                # Clean up unwanted files
-                if delete_temporary_files:
-                    arcpy.Delete_management(temp_raster)
-                    os.remove(temp_ascii)
-
             if run_multiple_pdcs:
                 arcpy.AddMessage('Converting ' +str(len(list_pdc_strings)) + ' ASCIIs to Phoenix data files. Warning: Slow')
                 procs = [ Popen(i) for i in list_pdc_strings ]
                 for p in procs:
                     p.wait()
+
+            # Clean up unwanted files
+            if delete_temporary_files:
+                for ascii in list_output_asciis:
+                    os.remove(ascii)
 
         # Delete the burnunits_sorted feature class
         if delete_temporary_files: 
