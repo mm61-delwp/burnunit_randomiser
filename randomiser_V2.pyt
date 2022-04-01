@@ -733,7 +733,7 @@ class asciiToPhoenix(object):
     def execute(self, parameters, messages):
         # Set environment & fix output extent to standard Phoenix data extent
         arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("GDA 1994 VICGRID94")
-        arcpy.env.extent = arcpy.Extent(2036000, 2251970, 2965280, 2842370)  # (XMin, YMin, XMax, YMax)
+        arcpy.env.extent = arcpy.Extent(2036000, 2253570, 2965280, 2842370)  # (XMin, YMin, XMax, YMax) # updated to match fuel extent per Andrew Blackett's change
 
         # Turn the tool parameters into usable variables
         ascii_list = parameters[0].valueAsText
